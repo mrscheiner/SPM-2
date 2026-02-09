@@ -1,4 +1,122 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+console.log('[FileImportBox][DEBUG] Component loaded and rendered');
+// Auto-import CSV data and replace sales log on startup for user request
+import { useEffect } from 'react';
+
+const AUTO_IMPORT_CSV = `Team,Season,GameID,PairID,Section,Row,Seats,SeatCount,Price,PaymentStatus,,
+Florida Panthers,2025-2026,1,pair1,129,26,24-25,2,234.0,Paid,,
+Florida Panthers,2025-2026,1,pair2,308,8,1-2,2,124.2,Paid,,
+Florida Panthers,2025-2026,1,pair3,325,5,6-7,2,138.6,Paid,,
+Florida Panthers,2025-2026,2,pair1,129,26,24-25,2,59.17,Paid,,
+Florida Panthers,2025-2026,2,pair2,308,8,1-2,2,23.4,Paid,,
+Florida Panthers,2025-2026,2,pair3,325,5,6-7,2,27.2,Paid,,
+Florida Panthers,2025-2026,3,pair1,129,26,24-25,2,128.0,Paid,,
+Florida Panthers,2025-2026,3,pair2,308,8,1-2,2,45.76,Paid,,
+Florida Panthers,2025-2026,3,pair3,325,5,6-7,2,54.0,Paid,,
+Florida Panthers,2025-2026,4,pair1,129,26,24-25,2,103.57,Paid,,
+Florida Panthers,2025-2026,4,pair2,308,8,1-2,2,36.5,Paid,,
+Florida Panthers,2025-2026,4,pair3,325,5,6-7,2,41.54,Paid,,
+Florida Panthers,2025-2026,5,pair1,129,26,24-25,2,153.0,Paid,,
+Florida Panthers,2025-2026,5,pair2,308,8,1-2,2,52.2,Paid,,
+Florida Panthers,2025-2026,5,pair3,325,5,6-7,2,72.0,Paid,,
+Florida Panthers,2025-2026,6,pair1,129,26,24-25,2,37.8,Paid,,
+Florida Panthers,2025-2026,6,pair2,308,8,1-2,2,27.0,Paid,,
+Florida Panthers,2025-2026,6,pair3,325,5,6-7,2,39.22,Paid,,
+Florida Panthers,2025-2026,7,pair1,129,26,24-25,2,118.8,Paid,,
+Florida Panthers,2025-2026,7,pair2,308,8,1-2,2,36.0,Paid,,
+Florida Panthers,2025-2026,7,pair3,325,5,6-7,2,54.0,Paid,,
+Florida Panthers,2025-2026,8,pair1,129,26,24-25,2,83.65,Paid,,
+Florida Panthers,2025-2026,8,pair2,308,8,1-2,2,25.83,Paid,,
+Florida Panthers,2025-2026,8,pair3,325,5,6-7,2,30.6,Paid,,
+Florida Panthers,2025-2026,9,pair1,129,26,24-25,2,197.66,Paid,,
+Florida Panthers,2025-2026,9,pair2,308,8,1-2,2,107.32,Paid,,
+Florida Panthers,2025-2026,9,pair3,325,5,6-7,2,71.01,Paid,,
+Florida Panthers,2025-2026,10,pair1,129,26,24-25,2,59.4,Paid,,
+Florida Panthers,2025-2026,10,pair2,308,8,1-2,2,19.96,Paid,,
+Florida Panthers,2025-2026,10,pair3,325,5,6-7,2,21.87,Paid,,
+Florida Panthers,2025-2026,11,pair1,129,26,24-25,2,48.94,Paid,,
+Florida Panthers,2025-2026,11,pair2,308,8,1-2,2,26.69,Paid,,
+Florida Panthers,2025-2026,11,pair3,325,5,6-7,2,13.5,Paid,,
+Florida Panthers,2025-2026,12,pair1,129,26,24-25,2,162.0,Paid,,
+Florida Panthers,2025-2026,12,pair2,308,8,1-2,2,74.61,Paid,,
+Florida Panthers,2025-2026,12,pair3,325,5,6-7,2,108.27,Paid,,
+Florida Panthers,2025-2026,13,pair1,129,26,24-25,2,113.58,Paid,,
+Florida Panthers,2025-2026,13,pair2,308,8,1-2,2,35.28,Paid,,
+Florida Panthers,2025-2026,13,pair3,325,5,6-7,2,37.98,Paid,,
+Florida Panthers,2025-2026,14,pair1,129,26,24-25,2,138.6,Paid,,
+Florida Panthers,2025-2026,14,pair2,308,8,1-2,2,48.6,Paid,,
+Florida Panthers,2025-2026,14,pair3,325,5,6-7,2,47.77,Paid,,
+Florida Panthers,2025-2026,15,pair1,129,26,24-25,2,127.35,Paid,,
+Florida Panthers,2025-2026,15,pair2,308,8,1-2,2,54.0,Paid,,
+Florida Panthers,2025-2026,15,pair3,325,5,6-7,2,41.4,Paid,,
+Florida Panthers,2025-2026,16,pair1,129,26,24-25,2,55.8,Paid,,
+Florida Panthers,2025-2026,16,pair2,308,8,1-2,2,32.13,Paid,,
+Florida Panthers,2025-2026,16,pair3,325,5,6-7,2,29.99,Paid,,
+Florida Panthers,2025-2026,17,pair1,129,26,24-25,2,72.09,Paid,,
+Florida Panthers,2025-2026,17,pair2,308,8,1-2,2,16.18,Paid,,
+Florida Panthers,2025-2026,17,pair3,325,5,6-7,2,12.6,Paid,,
+Florida Panthers,2025-2026,18,pair1,129,26,24-25,2,86.94,Paid,,
+Florida Panthers,2025-2026,18,pair2,308,8,1-2,2,27.67,Paid,,
+Florida Panthers,2025-2026,18,pair3,325,5,6-7,2,43.2,Paid,,
+Florida Panthers,2025-2026,19,pair1,129,26,24-25,2,1.0,Paid,,
+Florida Panthers,2025-2026,19,pair2,308,8,1-2,2,28.62,Paid,,
+Florida Panthers,2025-2026,19,pair3,325,5,6-7,2,45.0,Paid,,
+Florida Panthers,2025-2026,20,pair1,129,26,24-25,2,1.0,Paid,,
+Florida Panthers,2025-2026,20,pair2,308,8,1-2,2,31.39,Paid,,
+Florida Panthers,2025-2026,20,pair3,325,5,6-7,2,34.2,Paid,,
+Florida Panthers,2025-2026,21,pair1,129,26,24-25,2,75.6,Paid,,
+Florida Panthers,2025-2026,21,pair2,308,8,1-2,2,54.41,Paid,,
+Florida Panthers,2025-2026,21,pair3,325,5,6-7,2,68.4,Paid,,
+Florida Panthers,2025-2026,22,pair1,129,26,24-25,2,144.18,Paid,,
+Florida Panthers,2025-2026,22,pair2,308,8,1-2,2,301.72,Paid,,
+Florida Panthers,2025-2026,22,pair3,325,5,6-7,2,145.8,Paid,,
+Florida Panthers,2025-2026,23,pair1,129,26,24-25,2,232.96,Paid,,
+Florida Panthers,2025-2026,23,pair2,308,8,1-2,2,121.05,Paid,,
+Florida Panthers,2025-2026,23,pair3,325,5,6-7,2,108.0,Paid,,
+Florida Panthers,2025-2026,24,pair1,129,26,24-25,2,298.26,Paid,,
+Florida Panthers,2025-2026,24,pair2,308,8,1-2,2,154.03,Paid,,
+Florida Panthers,2025-2026,24,pair3,325,5,6-7,2,144.13,Paid,,
+Florida Panthers,2025-2026,25,pair1,129,26,24-25,2,200.25,Paid,,
+Florida Panthers,2025-2026,25,pair2,308,8,1-2,2,92.39,Paid,,
+Florida Panthers,2025-2026,25,pair3,325,5,6-7,2,81.81,Paid,,
+Florida Panthers,2025-2026,26,pair1,129,26,24-25,2,98.0,Paid,,
+Florida Panthers,2025-2026,26,pair2,308,8,1-2,2,33.73,Pending,,
+Florida Panthers,2025-2026,26,pair3,325,5,6-7,2,36.9,Pending,,
+Florida Panthers,2025-2026,27,pair1,129,26,24-25,2,99.0,Pending,,
+Florida Panthers,2025-2026,27,pair2,308,8,1-2,2,99.0,Pending,,
+Florida Panthers,2025-2026,27,pair3,325,5,6-7,2,66.28,Pending,,
+Florida Panthers,2025-2026,28,pair1,129,26,24-25,2,34.9,Pending,,
+Florida Panthers,2025-2026,28,pair2,308,8,1-2,2,120.6,Paid,,
+Florida Panthers,2025-2026,28,pair3,325,5,6-7,2,128.25,Paid,,
+Florida Panthers,2025-2026,29,pair1,129,26,24-25,2,130.36,Paid,,
+Florida Panthers,2025-2026,29,pair3,325,5,6-7,2,36.0,Paid,,
+Florida Panthers,2025-2026,29,pair2,308,8,1-2,2,29.7,Paid,,
+Florida Panthers,2025-2026,30,pair1,129,26,24-25,2,403.2,Pending,,
+Florida Panthers,2025-2026,30,pair2,308,8,1-2,2,97.85,Pending,,
+Florida Panthers,2025-2026,30,pair3,325,5,6-7,2,108.52,Pending,,
+Florida Panthers,2025-2026,31,pair1,129,26,24-25,2,208.37,Pending,,
+Florida Panthers,2025-2026,31,pair2,308,8,1-2,2,90.0,Pending,,
+Florida Panthers,2025-2026,32,pair2,308,8,1-2,2,72.41,Pending,,
+Florida Panthers,2025-2026,32,pair1,129,26,24-25,2,166.09,Pending,,
+Florida Panthers,2025-2026,p1,pair1,129,26,24-25,2,33.77,Paid,,
+Florida Panthers,2025-2026,p1,pair2,308,8,1-2,2,18.2,Paid,,
+Florida Panthers,2025-2026,p1,pair3,325,5,6-7,2,16.61,Paid,,
+Florida Panthers,2025-2026,p2,pair1,129,26,24-25,2,37.48,Paid,,
+Florida Panthers,2025-2026,p2,pair2,308,8,1-2,2,14.31,Paid,,
+Florida Panthers,2025-2026,p2,pair3,325,5,6-7,2,21.6,Paid,,`;
+
+useEffect(() => {
+  // Only run once on mount
+  (async () => {
+    if (activePassId && onImport) {
+      const rows = parseCSVContent(AUTO_IMPORT_CSV);
+      if (rows.length) {
+        await onImport(rows);
+        console.log('[AutoImport] Sales log replaced with CSV data');
+      }
+    }
+  })();
+}, []);
 import {
   StyleSheet,
   Text,
@@ -7,6 +125,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -37,63 +156,66 @@ type ImportStatus = 'idle' | 'parsing' | 'importing' | 'success' | 'error';
 
 function parseCSVContent(text: string): TicketRow[] {
   console.log('[FileImport] Parsing CSV content, length:', text.length);
+  // Accept pasted text in the exact format of the provided CSV, ignore extra columns and trailing commas
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length < 2) {
     console.log('[FileImport] CSV has fewer than 2 lines');
     return [];
   }
-
-  const headerLine = lines[0].toLowerCase();
-  const headers = headerLine.split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-  console.log('[FileImport] CSV headers:', headers);
-
-  const colIdx = {
-    totalPrice: headers.findIndex(h => /total.?price|price|amount|total/i.test(h)),
-    eventName: headers.findIndex(h => /event.?name|event|opponent|name/i.test(h)),
-    eventStartTime: headers.findIndex(h => /event.?start|start.?time|date|event.?date/i.test(h)),
-    section: headers.findIndex(h => /section/i.test(h)),
-    row: headers.findIndex(h => /^row$/i.test(h)),
-    seatNumber: headers.findIndex(h => /seat.?number|seat_number|seat/i.test(h)),
-  };
-
-  console.log('[FileImport] CSV column indices:', colIdx);
-
-  if (colIdx.totalPrice < 0 || colIdx.eventName < 0 || colIdx.eventStartTime < 0) {
-    console.log('[FileImport] CSV missing required columns (totalPrice, eventName, eventStartTime)');
+  const header = lines[0].split(',').map(h => h.trim());
+  const colMap: Record<string, number> = {};
+  header.forEach((h, i) => {
+    if (h) colMap[h] = i;
+  });
+  // Only require columns present in the user's file
+  const requiredCols = ['GameID', 'PairID', 'Section', 'Row', 'Seats', 'SeatCount', 'Price', 'PaymentStatus'];
+  if (!requiredCols.every(col => col in colMap)) {
+    console.log('[FileImport] Missing required columns:', requiredCols.filter(col => !(col in colMap)));
     return [];
   }
-
-  const grouped = new Map<string, { totalPrice: number; eventName: string; eventStartTime: string; tickets: { section: string; row: string; seat_number: number }[] }>();
-
+  const rows: TicketRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const parts = parseCSVLine(lines[i]);
-    if (parts.length <= Math.max(colIdx.totalPrice, colIdx.eventName, colIdx.eventStartTime)) continue;
-
-    const priceRaw = parts[colIdx.totalPrice]?.replace(/[^0-9.\-]/g, '') ?? '';
-    const totalPrice = Number(priceRaw);
-    if (!Number.isFinite(totalPrice)) continue;
-
-    const eventName = parts[colIdx.eventName] ?? '';
-    const eventStartTime = parts[colIdx.eventStartTime] ?? '';
-    if (!eventName || !eventStartTime) continue;
-
-    const section = colIdx.section >= 0 ? (parts[colIdx.section] ?? '').trim() : '';
-    const row = colIdx.row >= 0 ? (parts[colIdx.row] ?? '').trim() : '';
-    const seatNum = colIdx.seatNumber >= 0 ? Number(parts[colIdx.seatNumber]) : 0;
-
-    const groupKey = `${totalPrice}|${eventName}|${eventStartTime}`;
-    if (!grouped.has(groupKey)) {
-      let isoDate = eventStartTime;
-      try {
-        const d = new Date(eventStartTime);
-        if (!isNaN(d.getTime())) isoDate = d.toISOString();
-      } catch { /* keep original */ }
-      grouped.set(groupKey, { totalPrice, eventName, eventStartTime: isoDate, tickets: [] });
+    const row = lines[i].split(',');
+    // Defensive: skip if row is too short
+    if (row.length < header.length - 2) continue;
+    const gameId = row[colMap['GameID']];
+    const pairId = row[colMap['PairID']];
+    const section = row[colMap['Section']];
+    const r = row[colMap['Row']];
+    const seats = row[colMap['Seats']];
+    const seatCount = Number(row[colMap['SeatCount']]);
+    const price = Number(row[colMap['Price']]);
+    const paymentStatus = row[colMap['PaymentStatus']];
+    if (!gameId || !pairId || !section || !r || !seats || !seatCount || !price) continue;
+    // Parse seat numbers (e.g., 24-25 or 1-2)
+    let ticketSeats: number[] = [];
+    if (seats && seats.includes('-')) {
+      const [a, b] = seats.split('-').map(Number);
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        for (let s = a; s <= b; s++) ticketSeats.push(s);
+      }
+    } else if (seats) {
+      seats.split(',').forEach((s) => {
+        const n = Number(s.trim());
+        if (Number.isFinite(n)) ticketSeats.push(n);
+      });
+    } else {
+      for (let s = 1; s <= seatCount; s++) ticketSeats.push(s);
     }
-    if (section && row && Number.isFinite(seatNum) && seatNum > 0) {
-      grouped.get(groupKey)!.tickets.push({ section, row, seat_number: seatNum });
-    }
+    rows.push({
+      totalPrice: price,
+      eventName: '',
+      eventStartTime: '',
+      tickets: ticketSeats.map(sn => ({
+        section,
+        row: r,
+        seat_number: sn,
+        paymentStatus,
+      })),
+    });
   }
+  console.log('[FileImport][DEBUG] Parsed rows:', rows.length);
+  return rows;
 
   const rows = Array.from(grouped.values());
   console.log('[FileImport] CSV parsed rows:', rows.length);
@@ -132,12 +254,27 @@ function parseJSONContent(text: string): TicketRow[] {
     console.error('[FileImport] JSON parse error: ZIP/Excel signature detected');
     return [];
   }
+
   let data: any;
   try {
     data = JSON.parse(trimmed);
   } catch (e) {
     console.error('[FileImport] JSON parse error:', e);
     return [];
+  }
+
+  // Accept top-level salesData object (either wrapped or raw)
+  if (data && typeof data === 'object') {
+    // If file is just the salesData object itself
+    if (data.pair1 || data['1'] || data['p1']) {
+      // Looks like a raw salesData object (gameId keys)
+      data = { salesData: data };
+    }
+    // If file is { salesData: ... }
+    if (data.salesData && typeof data.salesData === 'object') {
+      // Wrap in a fake seasonPasses array for compatibility
+      data = { seasonPasses: [{ salesData: data.salesData }] };
+    }
   }
 
   let arr: any[] = [];
@@ -249,6 +386,8 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
   const [status, setStatus] = useState<ImportStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pastedText, setPastedText] = useState('');
+  const [isImportingText, setIsImportingText] = useState(false);
   const dropRef = useRef<View>(null);
 
   const processFile = useCallback(async (content: string, fileName: string, isBase64: boolean = false) => {
@@ -506,6 +645,79 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
           </Text>
         </View>
       </TouchableOpacity>
+
+      <Text style={{ marginVertical: 8, fontWeight: 'bold', textAlign: 'center' }}>OR</Text>
+      {Platform.OS === 'web' ? (
+        <textarea
+          style={{
+            minHeight: 100,
+            width: '100%',
+            borderColor: '#ccc',
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 8,
+            marginBottom: 8,
+            fontFamily: 'monospace',
+            resize: 'vertical',
+          }}
+          placeholder="Paste CSV data here..."
+          value={pastedText}
+          onChange={e => setPastedText(e.target.value)}
+          disabled={isImportingText || isProcessing}
+        />
+      ) : (
+        <TextInput
+          style={{
+            minHeight: 100,
+            borderColor: '#ccc',
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 8,
+            marginBottom: 8,
+            fontFamily: 'monospace',
+          }}
+          multiline
+          placeholder="Paste CSV data here..."
+          value={pastedText}
+          onChangeText={setPastedText}
+          editable={!isImportingText && !isProcessing}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      )}
+      <TouchableOpacity
+        style={[styles.resetButton, { backgroundColor: '#059669', marginBottom: 8 }]}
+        onPress={async () => {
+          setIsImportingText(true);
+          setStatus('parsing');
+          setStatusMessage('Parsing pasted text...');
+          try {
+            const rows = parseCSVContent(pastedText);
+            if (!rows.length) throw new Error('No valid data found in pasted text.');
+            setStatus('importing');
+            setStatusMessage('Importing pasted data...');
+            // Patch: Use replaceSalesDataFromPastedSeed for full sales log replacement
+            if (typeof window !== 'undefined' && window.SeasonPassProvider && window.SeasonPassProvider.replaceSalesDataFromPastedSeed) {
+              const result = await window.SeasonPassProvider.replaceSalesDataFromPastedSeed(pastedText, activePassId);
+              setStatus(result.success ? 'success' : 'error');
+              setStatusMessage(result.message || (result.success ? 'Import successful!' : 'Import failed.'));
+            } else {
+              // Fallback: Use onImport for environments where provider is not exposed
+              const result = await onImport(rows);
+              setStatus(result.success ? 'success' : 'error');
+              setStatusMessage(result.message || (result.success ? 'Import successful!' : 'Import failed.'));
+            }
+          } catch (err: any) {
+            setStatus('error');
+            setStatusMessage(err.message || 'Import failed.');
+          } finally {
+            setIsImportingText(false);
+          }
+        }}
+        disabled={isImportingText || isProcessing || !pastedText.trim()}
+      >
+        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{isImportingText ? 'Importing...' : 'Import Pasted CSV Text'}</Text>
+      </TouchableOpacity
 
       {(status === 'success' || status === 'error') && (
         <TouchableOpacity
