@@ -1,0 +1,173 @@
+{
+  "contextMarkers": {
+    "start": "=== RECOVERY CONTEXT START ===",
+    "end": "=== RECOVERY CONTEXT END ==="
+  },
+  "recoveryData": {
+    "version": "2.01",
+    "timestamp": "2026-01-17T01:42:28.288Z",
+    "appName": "Florida Panthers Ticket Sales Tracker",
+    "description": "🚨 CATASTROPHIC DATA RECOVERY CONTEXT - Complete backup including source code, configuration, and current data",
+    "salesData": {
+      "1": {
+        "pair2": {
+          "gameId": "1",
+          "pairId": "pair2",
+          "section": "308",
+          "row": "8",
+          "seats": "1-2",
+          "price": 124.2,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:13:27.544Z"
+        },
+        "pair1": {
+          "gameId": "1",
+          "pairId": "pair1",
+          "section": "129",
+          "row": "26",
+          "seats": "24-25",
+          "price": 234,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:13:21.793Z"
+        },
+        "pair3": {
+          "gameId": "1",
+          "pairId": "pair3",
+          "section": "325",
+          "row": "5",
+          "seats": "6-7",
+          "price": 138.6,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:15:55.784Z"
+        }
+      },
+      "2": {
+        "pair2": {
+          "gameId": "2",
+          "pairId": "pair2",
+          "section": "308",
+          "row": "8",
+          "seats": "1-2",
+          "price": 23.4,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:13:38.571Z"
+        },
+        "pair1": {
+          "gameId": "2",
+          "pairId": "pair1",
+          "section": "129",
+          "row": "26",
+          "seats": "24-25",
+          "price": 59.17,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:13:34.487Z"
+        },
+        "pair3": {
+          "gameId": "2",
+          "pairId": "pair3",
+          "section": "325",
+          "row": "5",
+          "seats": "6-7",
+          "price": 27.2,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:16:08.870Z"
+        }
+      },
+      "3": {
+        "pair1": {
+          "gameId": "3",
+          "pairId": "pair1",
+          "section": "129",
+          "row": "26",
+          "seats": "24-25",
+          "price": 128,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-29T15:51:27.650Z"
+        },
+        "pair2": {
+          "gameId": "3",
+          "pairId": "pair2",
+          "section": "308",
+          "row": "8",
+          "seats": "1-2",
+          "price": 45.76,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:13:52.048Z"
+        },
+        "pair3": {
+          "gameId": "3",
+          "pairId": "pair3",
+          "section": "325",
+          "row": "5",
+          "seats": "6-7",
+          "price": 54,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-15T02:16:18.821Z"
+        }
+      },
+      "4": {
+        "pair1": {
+          "gameId": "4",
+          "pairId": "pair1",
+          "section": "129",
+          "row": "26",
+          "seats": "24-25",
+          "price": 103.57,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-29T15:50:29.530Z"
+        },
+        "pair3": {
+          "gameId": "4",
+          "pairId": "pair3",
+          "section": "325",
+          "row": "5",
+          "seats": "6-7",
+          "price": 41.54,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-29T15:47:30.524Z"
+        },
+        "pair2": {
+          "gameId": "4",
+          "pairId": "pair2",
+          "section": "308",
+          "row": "8",
+          "seats": "1-2",
+          "price": 36.5,
+          "paymentStatus": "paid",
+          "soldDate": "2025-10-29T15:50:24.596Z"
+        }
+      }
+  },
+  "seatPairs": [
+      {
+        "id": "pair1",
+        "section": "129",
+        "row": "26",
+        "seats": "24-25",
+        "seasonCost": 6651.12
+      },
+      {
+        "id": "pair2",
+        "section": "308",
+        "row": "8",
+        "seats": "1-2",
+        "seasonCost": 3505.32
+      },
+      {
+        "id": "pair3",
+        "section": "325",
+        "row": "5",
+        "seats": "6-7",
+        "seasonCost": 3505.32
+      }
+    ],
+    "appConfig": {
+      "name": "Florida Panthers Ticket Sales Tracker",
+      "slug": "florida-panthers-ticket-sales-tracker",
+      "version": "2.01",
+      "bundleIdentifier": "app.rork.florida-panthers-ticket-sales-tracker",
+      "package": "app.rork.florida-panthers-ticket-sales-tracker",
+      "season": "2025-2026"
+    }
+  }
+}
