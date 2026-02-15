@@ -1,4 +1,4 @@
-export const CANONICAL_DATA_VERSION = '2.0';
+export const CANONICAL_DATA_VERSION = '2.1';
 
 export const CANONICAL_VERSION_KEY = '@canonical_data_version';
 
