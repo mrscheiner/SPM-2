@@ -39,6 +39,7 @@ export default function DeveloperSettings() {
     prepareBackupPackage,
     clearAllData,
     reloadFromStorage,
+    forceReplacePanthersSales,
   } = useSeasonPass();
 
   const [isExporting, setIsExporting] = useState(false);
@@ -229,6 +230,48 @@ export default function DeveloperSettings() {
             </View>
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity
+          style={styles.devCard}
+          onPress={() => {
+            Alert.alert(
+              'Force Replace Panthers Sales',
+              'This will wipe existing Panthers sales and replace them with the JSON canonical seed (wipe + replace). Continue?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Replace',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                      const res: any = await forceReplacePanthersSales();
+                      if (res && res.success) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert('Replace Complete', `Inserted ${res.salesCount} sales records.`);
+                        await reloadFromStorage();
+                      } else {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        Alert.alert('Replace Failed', 'Could not replace Panthers sales. Check logs.');
+                      }
+                    } catch (e) {
+                      console.error('[DevSettings] forceReplacePanthersSales error:', e);
+                      Alert.alert('Error', 'Failed to replace sales. See logs.');
+                    }
+                  },
+                },
+              ],
+            );
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#FCE4EC' }]}> 
+            <Database size={24} color="#C2185B" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Force Replace Sales from JSON</Text>
+            <Text style={styles.settingDescription}>Wipe Panthers sales and re-seed from bundled JSON</Text>
+          </View>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.devCard, isExporting && styles.cardDisabled]}
