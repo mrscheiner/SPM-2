@@ -714,6 +714,35 @@ type TicketSaleSeedRow = {
   tickets: { section: string; row: string; seat_number: number }[];
 };
 
+let DYNAMIC_PANTHERS_TICKET_SALES_SEED: TicketSaleSeedRow[] | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const raw = require('../scripts/panthers_seed.json');
+  const candidates: any[] = [];
+  function collect(x: any) {
+    if (x && typeof x === 'object') {
+      if (Array.isArray(x)) { x.forEach(collect); return; }
+      if (typeof x.totalPrice === 'number' || typeof x.price === 'number') { candidates.push(x); return; }
+      Object.values(x).forEach(collect);
+    }
+  }
+  collect(raw);
+  DYNAMIC_PANTHERS_TICKET_SALES_SEED = candidates.map((o: any) => {
+    const totalPrice = typeof o.totalPrice === 'number' ? o.totalPrice : (typeof o.price === 'number' ? o.price : 0);
+    const eventName = o.eventName || o.event_name || o.name || o.event || '';
+    const eventStartTime = o.eventStartTime || o.event_start_time || o.startTime || o.date || o.dateTimeISO || '';
+    let tickets: { section: string; row: string; seat_number: number }[] = [];
+    if (Array.isArray(o.tickets) && o.tickets.length) {
+      tickets = o.tickets.map((t: any) => ({ section: String(t.section || ''), row: String(t.row || ''), seat_number: Number(t.seat_number || t.seat || t.seatNumber || 0) }));
+    } else if (Array.isArray(o.seatPairs)) {
+      tickets = o.seatPairs.flatMap((sp: any) => (sp.seats || []).map((s: any) => ({ section: sp.section || '', row: sp.row || '', seat_number: Number(s) })));
+    }
+    return { totalPrice: Math.round((Number(totalPrice) || 0) * 100) / 100, eventName, eventStartTime, tickets };
+  });
+} catch (e) {
+  DYNAMIC_PANTHERS_TICKET_SALES_SEED = null;
+}
+
 const PANTHERS_TICKET_SALES_SEED: TicketSaleSeedRow[] = [
   { totalPrice: 120.58, eventName: 'Boston Bruins at Florida Panthers', eventStartTime: '2026-02-05T00:00:00.000Z', tickets: [{ section: '325', row: '5', seat_number: 6 }, { section: '325', row: '5', seat_number: 7 }] },
   { totalPrice: 73.64, eventName: 'Utah Mammoth at Florida Panthers', eventStartTime: '2026-01-28T00:00:00.000Z', tickets: [{ section: '325', row: '5', seat_number: 6 }, { section: '325', row: '5', seat_number: 7 }] },
@@ -955,7 +984,8 @@ function buildSalesDataFromTicketSaleSeedRows(
 }
 
 function buildCanonicalPanthersSalesData(games: Game[], seatPairs: SeatPair[]): Record<string, Record<string, SaleRecord>> {
-  return buildSalesDataFromTicketSaleSeedRows(PANTHERS_TICKET_SALES_SEED, games, seatPairs);
+  const seedToUse = (DYNAMIC_PANTHERS_TICKET_SALES_SEED && DYNAMIC_PANTHERS_TICKET_SALES_SEED.length) ? DYNAMIC_PANTHERS_TICKET_SALES_SEED : PANTHERS_TICKET_SALES_SEED;
+  return buildSalesDataFromTicketSaleSeedRows(seedToUse as TicketSaleSeedRow[], games, seatPairs);
 }
 
 function parseTicketSaleSeedText(raw: string): TicketSaleSeedRow[] {
