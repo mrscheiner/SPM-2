@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, Dimensions } from "react-native";
+import { StyleSheet, Text, View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { DollarSign, Calendar, Percent, TrendingUp, Clock } from "lucide-react-native";

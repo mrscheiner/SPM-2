@@ -321,18 +321,18 @@ export const ticketmasterRouter = createTRPCRouter({
         teamAbbreviation: z.string().optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log("[TM_PROXY] ========== getSchedule HIT ==========");
       console.log("[TM_PROXY] Input:", JSON.stringify(input));
 
-      const apiKey = process.env.TICKETMASTER_API_KEY;
+      const apiKey = ctx.env.TICKETMASTER_API_KEY;
       const hasKey = Boolean(apiKey);
       const keyLength = apiKey?.length ?? 0;
       console.log("[TM_PROXY] API Key check: hasKey=", hasKey, "keyLength=", keyLength);
       
       if (!apiKey) {
-        console.error("[TM_PROXY] ❌ TICKETMASTER_API_KEY not set in process.env");
-        console.error("[TM_PROXY] Available env vars (names only):", Object.keys(process.env).filter(k => !k.startsWith('npm_')).join(', '));
+        console.error("[TM_PROXY] ❌ TICKETMASTER_API_KEY not set in ctx.env");
+        console.error("[TM_PROXY] Available env vars (names only):", Object.keys(ctx.env).filter(k => !k.startsWith('npm_')).join(', '));
         return { events: [], error: "API_KEY_MISSING" };
       }
 

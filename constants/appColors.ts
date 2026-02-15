@@ -1,19 +1,23 @@
 export const AppColors = {
-  primary: '#002B5C',
-  primaryDark: '#001F45',
-  accent: '#C8102E',
-  gold: '#B9975B',
-  white: '#FFFFFF',
+  // Background colors
   background: '#F5F5F7',
-  cardBg: '#FFFFFF',
-  textPrimary: '#001F45',
-  textSecondary: '#6B7280',
-  textLight: '#9CA3AF',
-  border: '#E5E7EB',
-  success: '#2ECC71',
-  pending: '#EF4444',
-  pendingBg: '#FEE2E2',
-  paidBg: '#D1FAE5',
-  gray: '#F3F4F6',
-  iconGray: '#6B7280',
+  white: '#FFFFFF',
+  gray: '#E5E5E7',
+
+  // Primary brand colors (Panthers theme)
+  primary: '#002B5C',
+  gold: '#B9975B',
+  accent: '#C8102E',
+
+  // Text colors
+  textPrimary: '#1A1A1A',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  iconGray: '#999999',
+
+  // Status colors
+  success: '#28A745',
+
+  // Border color
+  border: '#E5E5E7',
 } as const;

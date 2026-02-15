@@ -5,6 +5,7 @@ import superjson from "superjson";
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   return {
     req: opts.req,
+    env: (opts.req as any).env || process?.env || {},
   };
 };
 

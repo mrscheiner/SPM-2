@@ -104,7 +104,7 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <SeasonPassProvider>
-          <GestureHandlerRootView style={rootViewStyle}>
+          <GestureHandlerRootView style={rootViewStyle as any}>
             <RootLayoutNav />
           </GestureHandlerRootView>
         </SeasonPassProvider>

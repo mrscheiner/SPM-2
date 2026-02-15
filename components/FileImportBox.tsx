@@ -1,7 +1,22 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  TextInput,
+} from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
+import { Upload, FileSpreadsheet, Check, AlertTriangle } from 'lucide-react-native';
+import { AppColors } from '@/constants/appColors';
 console.log('[FileImportBox][DEBUG] Component loaded and rendered');
 // Auto-import CSV data and replace sales log on startup for user request
-import { useEffect } from 'react';
 
 const AUTO_IMPORT_CSV = `Team,Season,GameID,PairID,Section,Row,Seats,SeatCount,Price,PaymentStatus,,
 Florida Panthers,2025-2026,1,pair1,129,26,24-25,2,234.0,Paid,,
@@ -105,34 +120,6 @@ Florida Panthers,2025-2026,p2,pair1,129,26,24-25,2,37.48,Paid,,
 Florida Panthers,2025-2026,p2,pair2,308,8,1-2,2,14.31,Paid,,
 Florida Panthers,2025-2026,p2,pair3,325,5,6-7,2,21.6,Paid,,`;
 
-useEffect(() => {
-  // Only run once on mount
-  (async () => {
-    if (activePassId && onImport) {
-      const rows = parseCSVContent(AUTO_IMPORT_CSV);
-      if (rows.length) {
-        await onImport(rows);
-        console.log('[AutoImport] Sales log replaced with CSV data');
-      }
-    }
-  })();
-}, []);
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  TextInput,
-} from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
-import { Upload, FileSpreadsheet, Check, AlertTriangle } from 'lucide-react-native';
-import { AppColors } from '@/constants/appColors';
-
 type TicketRow = {
   totalPrice: number;
   eventName: string;
@@ -216,13 +203,10 @@ function parseCSVContent(text: string): TicketRow[] {
   }
   console.log('[FileImport][DEBUG] Parsed rows:', rows.length);
   return rows;
-
-  const rows = Array.from(grouped.values());
-  console.log('[FileImport] CSV parsed rows:', rows.length);
-  return rows;
 }
 
-function parseCSVLine(line: string): string[] {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -377,7 +361,8 @@ function parseJSONContent(text: string): TicketRow[] {
   return rows;
 }
 
-async function parseExcelContent(_base64OrUri: string, _isBase64: boolean): Promise<TicketRow[]> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _parseExcelContent(_base64OrUri: string, _isBase64: boolean): Promise<TicketRow[]> {
   console.log('[FileImport] Excel parsing is not supported in this environment. Please convert to CSV or JSON.');
   return [];
 }
@@ -389,6 +374,19 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
   const [pastedText, setPastedText] = useState('');
   const [isImportingText, setIsImportingText] = useState(false);
   const dropRef = useRef<View>(null);
+
+  useEffect(() => {
+    // Only run once on mount
+    (async () => {
+      if (activePassId && onImport) {
+        const rows = parseCSVContent(AUTO_IMPORT_CSV);
+        if (rows.length) {
+          await onImport(rows);
+          console.log('[AutoImport] Sales log replaced with CSV data');
+        }
+      }
+    })();
+  }, [activePassId, onImport]);
 
   const processFile = useCallback(async (content: string, fileName: string, isBase64: boolean = false) => {
     if (!activePassId) {
@@ -717,7 +715,7 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
         disabled={isImportingText || isProcessing || !pastedText.trim()}
       >
         <Text style={{ color: '#fff', fontWeight: 'bold' }}>{isImportingText ? 'Importing...' : 'Import Pasted CSV Text'}</Text>
-      </TouchableOpacity
+      </TouchableOpacity>
 
       {(status === 'success' || status === 'error') && (
         <TouchableOpacity

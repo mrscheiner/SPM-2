@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { SeasonPass, SeatPair, SaleRecord, Game, Event, League, Team } from '@/constants/types';
+import { loadSalesData, SalesDataRow } from '@/lib/loadSalesData';
 import { LEAGUES, getTeamsByLeague, NHL_TEAMS } from '@/constants/leagues';
 import { PANTHERS_20252026_SCHEDULE } from '@/constants/panthersSchedule';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -80,8 +81,46 @@ async function fetchScheduleViaESPN(pass: {
     try {
       result = await trpcClient.espn.getFullSchedule.query(trpcInput);
     } catch (fetchErr: any) {
-      console.log('[ScheduleFetch] ESPN backend unavailable:', fetchErr?.message || 'Network error');
-      return { games: [], error: 'NETWORK' };
+      console.log('[ScheduleFetch] ESPN tRPC unavailable:', fetchErr?.message || 'Network error');
+      // Try compatibility REST endpoint as fallback
+      try {
+        const compatUrl = `${baseUrl.replace(/\/$/, '')}/compat/espn/getFullSchedule`;
+        console.log('[ScheduleFetch] Trying compat ESPN POST at', compatUrl);
+        const resp = await fetch(compatUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(trpcInput),
+        });
+        if (!resp.ok) {
+          console.log('[ScheduleFetch] compat ESPN fetch returned non-ok', resp.status);
+          return { games: [], error: 'NETWORK' };
+        }
+        const compat = await resp.json();
+        if (compat.error || !compat.events || compat.events.length === 0) {
+          console.log('[ScheduleFetch] compat ESPN returned error or no events:', compat.error);
+          return { games: [], error: 'NO_SCHEDULE' };
+        }
+        const games: Game[] = (compat.events || []).map((ev: any) => ({
+          id: ev.id,
+          date: ev.date,
+          month: ev.month,
+          day: ev.day,
+          opponent: ev.opponent,
+          opponentLogo: ev.opponentLogo,
+          venueName: ev.venueName,
+          time: ev.time,
+          ticketStatus: ev.ticketStatus || 'Available',
+          isPaid: ev.isPaid || false,
+          gameNumber: ev.gameNumber,
+          type: ev.type,
+          dateTimeISO: ev.dateTimeISO,
+        }));
+        console.log('[ScheduleFetch] ✅ compat ESPN mapped', games.length, 'games');
+        return { games, error: null };
+      } catch (compatErr) {
+        console.log('[ScheduleFetch] compat ESPN fetch failed:', String(compatErr));
+        return { games: [], error: 'NETWORK' };
+      }
     }
     const elapsed = Date.now() - startTime;
     console.log('[ScheduleFetch] ✅ ESPN tRPC call completed in', elapsed, 'ms');
@@ -155,8 +194,48 @@ async function fetchScheduleViaTicketmaster(pass: {
     try {
       result = await trpcClient.ticketmaster.getSchedule.query(trpcInput);
     } catch (fetchErr: any) {
-      console.log('[ScheduleFetch] Ticketmaster backend unavailable:', fetchErr?.message || 'Network error');
-      return { games: [], error: 'NETWORK' };
+      console.log('[ScheduleFetch] Ticketmaster tRPC unavailable:', fetchErr?.message || 'Network error');
+      // Try compatibility REST endpoint as fallback
+      try {
+        const compatUrl = `${baseUrl.replace(/\/$/, '')}/compat/tm/getSchedule`;
+        console.log('[ScheduleFetch] Trying compat TM POST at', compatUrl);
+        const resp = await fetch(compatUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(trpcInput),
+        });
+        if (!resp.ok) {
+          console.log('[ScheduleFetch] compat TM fetch returned non-ok', resp.status);
+          return { games: [], error: 'NETWORK' };
+        }
+        const compat = await resp.json();
+        if (compat.error) {
+          console.log('[ScheduleFetch] compat TM returned error:', compat.error);
+          let mappedError: ScheduleFetchResult['error'] = 'NO_SCHEDULE';
+          if (compat.error === 'API_KEY_MISSING') mappedError = 'API_KEY_MISSING';
+          return { games: [], error: mappedError };
+        }
+        const games: Game[] = (compat.events || []).map((ev: any) => ({
+          id: ev.id,
+          date: ev.date,
+          month: ev.month,
+          day: ev.day,
+          opponent: ev.opponent,
+          opponentLogo: ev.opponentLogo,
+          venueName: ev.venueName,
+          time: ev.time,
+          ticketStatus: ev.ticketStatus || 'Available',
+          isPaid: ev.isPaid || false,
+          gameNumber: ev.gameNumber,
+          type: ev.type,
+          dateTimeISO: ev.dateTimeISO,
+        }));
+        console.log('[ScheduleFetch] ✅ compat TM mapped', games.length, 'games');
+        return { games, error: null };
+      } catch (compatErr) {
+        console.log('[ScheduleFetch] compat TM fetch failed:', String(compatErr));
+        return { games: [], error: 'NETWORK' };
+      }
     }
     const elapsed = Date.now() - startTime;
     console.log('[ScheduleFetch] ✅ Ticketmaster tRPC call completed in', elapsed, 'ms');
@@ -214,6 +293,15 @@ async function fetchScheduleViaBackend(pass: {
   teamAbbreviation?: string;
 }): Promise<ScheduleFetchResult> {
   console.log('[ScheduleFetch] ========== COMBINED FETCH START ==========');
+  
+  const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  console.log('[ScheduleFetch] EXPO_PUBLIC_RORK_API_BASE_URL:', baseUrl);
+  
+  if (!baseUrl) {
+    console.log('[ScheduleFetch] ❌ EXPO_PUBLIC_RORK_API_BASE_URL is not set - returning NETWORK error');
+    return { games: [], error: 'NETWORK' };
+  }
+  
   console.log('[ScheduleFetch] Trying ESPN first (primary source)...');
   
   // Try ESPN first (free, reliable)
@@ -1062,21 +1150,47 @@ async function recoverFromAllPassesBackup(): Promise<SeasonPass[] | null> {
   }
 }
 
+
 async function safeSeedPanthersIfEmpty(): Promise<SeasonPass | null> {
   console.log('[Seed] Checking if Panthers seed is needed...');
-  
   const panthersTeam = NHL_TEAMS.find(t => t.id === 'fla');
   const nhlLeague = LEAGUES.find(l => l.id === 'nhl');
-  
   if (!panthersTeam || !nhlLeague) {
     console.error('[Seed] Could not find Florida Panthers or NHL league');
     return null;
   }
-  
   const games = PANTHERS_20252026_SCHEDULE;
-  const canonicalSalesData = buildCanonicalPanthersSalesData(games, INITIAL_BACKUP_DATA.seatPairs);
-  console.log('[Seed] Built canonical sales data from PANTHERS_TICKET_SALES_SEED');
-
+  let salesData = buildCanonicalPanthersSalesData(games, INITIAL_BACKUP_DATA.seatPairs);
+  try {
+    // Try to load and parse the CSV sales data
+    const csvRows = await loadSalesData();
+    if (Array.isArray(csvRows) && csvRows.length > 0) {
+      // Convert CSV rows to the internal grouped format
+      const grouped: Record<string, Record<string, SaleRecord>> = {};
+      for (const row of csvRows) {
+        if (!row.GameID || !row.PairID) continue;
+        const gameId = String(row.GameID);
+        const pairId = String(row.PairID);
+        if (!grouped[gameId]) grouped[gameId] = {};
+        grouped[gameId][pairId] = {
+          id: `${gameId}_${pairId}`,
+          gameId,
+          pairId,
+          section: String(row.Section),
+          row: String(row.Row),
+          seats: String(row.Seats),
+          seatCount: Number(row.SeatCount) || 2,
+          price: Number(row.Price) || 0,
+          paymentStatus: normalizePaymentStatus(row.PaymentStatus),
+          soldDate: new Date().toISOString(),
+        };
+      }
+      salesData = grouped;
+      console.log('[Seed] Loaded sales data from CSV, rows:', csvRows.length);
+    }
+  } catch (e) {
+    console.warn('[Seed] Could not load sales-data.csv, using canonical sales data. Error:', e);
+  }
   const seasonPass: SeasonPass = {
     id: 'sp_imported_panthers_2025',
     leagueId: 'nhl',
@@ -1087,12 +1201,11 @@ async function safeSeedPanthersIfEmpty(): Promise<SeasonPass | null> {
     teamSecondaryColor: panthersTeam.secondaryColor,
     seasonLabel: '2025-2026',
     seatPairs: INITIAL_BACKUP_DATA.seatPairs,
-    salesData: canonicalSalesData,
+    salesData,
     games,
     events: [],
     createdAtISO: new Date().toISOString(),
   };
-  
   console.log('[Seed] ✅ Created Panthers pass:', seasonPass.id);
   return seasonPass;
 }
@@ -1765,9 +1878,9 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
           teamName: team.name,
           teamAbbreviation: team.abbreviation,
         });
-  games = result.games;
-  // Try to populate opponent logos immediately for fetched schedules
-  games = fillOpponentLogosForLeague(games, league.id);
+        games = result.games;
+        // Try to populate opponent logos immediately for fetched schedules
+        games = fillOpponentLogosForLeague(games, league.id);
         
         if (result.error && games.length === 0) {
           if (result.error === 'NETWORK') {

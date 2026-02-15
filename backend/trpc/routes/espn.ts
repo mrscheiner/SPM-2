@@ -1,3 +1,6 @@
+// Simple in-memory cache for schedules
+const scheduleCache: Record<string, { timestamp: number; data: any }> = {};
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
@@ -391,6 +394,14 @@ export const espnRouter = createTRPCRouter({
         return { events: [], error: "INVALID_LEAGUE" };
       }
 
+      // Build cache key: league+team+season
+      const cacheKey = `${leagueKey}:${input.teamAbbreviation || ''}:${input.teamName || ''}`;
+      const now = Date.now();
+      if (scheduleCache[cacheKey] && (now - scheduleCache[cacheKey].timestamp < CACHE_TTL_MS)) {
+        console.log('[ESPN_FULL][CACHE] Returning cached schedule for', cacheKey);
+        return scheduleCache[cacheKey].data;
+      }
+
       // First resolve the ESPN team ID
       const teamsUrl = `${ESPN_SITE_BASE}/sports/${cfg.sport}/${cfg.league}/teams`;
       console.log('[ESPN_FULL] Fetching teams from:', teamsUrl);
@@ -415,75 +426,39 @@ export const espnRouter = createTRPCRouter({
 
       console.log('[ESPN_FULL] Found', teams.length, 'teams');
 
-      // Find the team - use multiple matching strategies for robustness
+      // Always resolve ESPN team ID from abbreviation or name for NBA (ignore string teamId)
       const norm = (s?: string) => (s ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       const normSpaces = (s?: string) => (s ?? "").trim().toLowerCase();
       const wantedAbbr = norm(input.teamAbbreviation);
       const wantedName = norm(input.teamName);
       const wantedNameSpaces = normSpaces(input.teamName);
-      const wantedTeamId = norm(input.teamId);
-
-      console.log('[ESPN_FULL] Looking for:', { wantedAbbr, wantedName, wantedTeamId });
-      console.log('[ESPN_FULL] Available teams sample:', teams.slice(0, 5).map(t => ({
-        abbr: t.abbreviation,
-        displayName: t.displayName,
-        name: t.name
-      })));
-
-      // Extract key words from team name for fuzzy matching
-      // e.g., "Baltimore Ravens" -> ["baltimore", "ravens"]
       const teamNameWords = wantedNameSpaces.split(/\s+/).filter(w => w.length > 2);
-      console.log('[ESPN_FULL] Team name words for fuzzy match:', teamNameWords);
-
+      console.log('[ESPN_FULL][DEBUG] NBA team list:', teams.map(t => ({id: t.id, abbr: t.abbreviation, name: t.displayName})));
       let match =
-        // Exact abbreviation match
         teams.find((t) => norm(t?.abbreviation) === wantedAbbr) ||
-        // Exact display name match
         teams.find((t) => norm(t?.displayName) === wantedName) ||
-        // Exact short name match
         teams.find((t) => norm(t?.shortDisplayName) === wantedName) ||
-        // Exact name match
         teams.find((t) => norm(t?.name) === wantedName) ||
-        // Display name contains our name
         teams.find((t) => norm(t?.displayName)?.includes(wantedName)) ||
-        // Our name contains their name
         teams.find((t) => wantedName?.includes(norm(t?.name))) ||
-        // Fuzzy: any key word from team name matches
         teams.find((t) => {
           const tName = norm(t?.displayName || t?.name || '');
           return teamNameWords.some(word => tName.includes(word));
         }) ||
-        // Last resort: city name match (first word of team name often is city)
         teams.find((t) => {
           const tCity = norm(t?.location || '');
           const ourCity = teamNameWords[0] || '';
           return tCity && ourCity && (tCity.includes(ourCity) || ourCity.includes(tCity));
         }) ||
         null;
-      
-      // Additional NFL-specific matching
-      if (!match && leagueKey === 'nfl') {
-        console.log('[ESPN_FULL] NFL team not found with standard matching, trying NFL-specific...');
-        // Try matching just the team nickname (e.g., "Ravens" from "Baltimore Ravens")
-        const nickname = teamNameWords[teamNameWords.length - 1]; // Last word is usually nickname
-        match = teams.find((t) => {
-          const tName = normSpaces(t?.displayName || t?.name || '');
-          return tName.includes(nickname);
-        });
-        if (match) {
-          console.log('[ESPN_FULL] NFL nickname match found:', match.displayName);
-        }
-      }
-
       if (!match?.id) {
-        console.log('[ESPN_FULL] Team not found. Available:', teams.slice(0, 10).map(t => t.abbreviation));
+        console.log('[ESPN_FULL][DEBUG] No team match found for:', {wantedAbbr, wantedName, wantedNameSpaces: wantedNameSpaces, teamNameWords});
         return { events: [], error: "TEAM_NOT_FOUND" };
       }
-
+      console.log('[ESPN_FULL][DEBUG] Matched team:', {id: match.id, abbr: match.abbreviation, name: match.displayName});
       const espnTeamId = String(match.id);
       const teamAbbr = match.abbreviation || input.teamAbbreviation || '';
       const teamDisplayName = match.displayName || input.teamName;
-      console.log('[ESPN_FULL] Matched team:', espnTeamId, teamAbbr, teamDisplayName);
 
       // Fetch the schedule - try multiple season years to ensure we get data
       const seasonInfo = getSeasonYears(leagueKey);
@@ -528,28 +503,36 @@ export const espnRouter = createTRPCRouter({
       
       if (rawEvents.length === 0) {
         console.log('[ESPN_FULL] No events found after trying all season options');
+        // Cache the empty result to avoid hammering ESPN
+        scheduleCache[cacheKey] = { timestamp: now, data: { events: [], error: "NO_SCHEDULE" } };
         return { events: [], error: "NO_SCHEDULE" };
       }
       
       console.log('[ESPN_FULL] Total raw events:', rawEvents.length);
 
       // Filter to home games only
-      const homeEvents = rawEvents.filter((ev: any) => {
-        const competitions = ev?.competitions || [];
-        if (competitions.length === 0) return true; // Include if no competition data
-        
-        const comp = competitions[0];
-        const competitors = comp?.competitors || [];
-        
-        // Find our team in competitors
-        const ourTeam = competitors.find((c: any) => 
-          String(c?.team?.id) === espnTeamId ||
-          norm(c?.team?.abbreviation) === norm(teamAbbr)
-        );
-        
-        // Home team has homeAway: "home"
-        return ourTeam?.homeAway === 'home';
-      });
+        // Filter to home games only, with detailed debug logging
+        const homeEvents = rawEvents.filter((ev: any, idx: number) => {
+          const competitions = ev?.competitions || [];
+          if (competitions.length === 0) {
+            console.log(`[ESPN_FULL][DEBUG] Event #${idx} has no competitions, including by default. Event:`, ev?.id, ev?.name);
+            return true; // Include if no competition data
+          }
+          const comp = competitions[0];
+          const competitors = comp?.competitors || [];
+          // Only use team ID for home/away detection to avoid abbreviation mismatches
+          const ourTeam = competitors.find((c: any) => String(c?.team?.id) === espnTeamId);
+          if (!ourTeam) {
+            console.log(`[ESPN_FULL][DEBUG][FIX] Event #${idx} - our team not found in competitors by ID. Event:`, ev?.id, ev?.name, 'Competitors:', competitors.map(c => c?.team?.id));
+          }
+          const isHome = ourTeam?.homeAway === 'home';
+          if (isHome) {
+            console.log(`[ESPN_FULL][DEBUG][FIX] Event #${idx} is a HOME game. Event:`, ev?.id, ev?.name);
+          } else {
+            console.log(`[ESPN_FULL][DEBUG][FIX] Event #${idx} is NOT a home game. Event:`, ev?.id, ev?.name, 'homeAway:', ourTeam?.homeAway);
+          }
+          return isHome;
+        });
 
       console.log('[ESPN_FULL] Filtered to', homeEvents.length, 'home games');
 
@@ -563,15 +546,14 @@ export const espnRouter = createTRPCRouter({
         const competitors = comp?.competitors || [];
         
         // Find opponent (the team that's not us)
-        const opponent = competitors.find((c: any) => 
-          String(c?.team?.id) !== espnTeamId &&
-          norm(c?.team?.abbreviation) !== norm(teamAbbr)
-        );
-        
+        let opponent = competitors.find((c: any) => String(c?.team?.id) !== espnTeamId);
+        // Fallback: if only one competitor, use it as opponent (neutral/odd ESPN data)
+        if (!opponent && competitors.length === 1) {
+          opponent = competitors[0];
+        }
         const opponentName = opponent?.team?.displayName || opponent?.team?.shortDisplayName || opponent?.team?.name || ev.name || 'TBD';
         const opponentAbbr = opponent?.team?.abbreviation || '';
         let opponentLogo = opponent?.team?.logo || opponent?.team?.logos?.[0]?.href;
-        
         // Fallback logo from ESPN CDN
         if (!opponentLogo && opponentAbbr) {
           opponentLogo = getESPNTeamLogoUrl(leagueKey, opponentAbbr);
@@ -630,6 +612,8 @@ export const espnRouter = createTRPCRouter({
       console.log('[ESPN_FULL] ✅ Returning', mappedEvents.length, 'home games');
       console.log('[ESPN_FULL] ========== SUCCESS ==========');
 
-      return { events: mappedEvents, error: null };
+      const result = { events: mappedEvents, error: null };
+      scheduleCache[cacheKey] = { timestamp: now, data: result };
+      return result;
     }),
 });

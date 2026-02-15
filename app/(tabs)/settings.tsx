@@ -365,7 +365,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitle}>IMPORT DATA</Text>
             <FileImportBox
               onImport={importSalesFromFileData}
-              activePassId={activeSeasonPassId}
+              activeSeasonPassId={activeSeasonPassId}
             />
           </View>
 

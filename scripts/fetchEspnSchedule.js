@@ -61,33 +61,38 @@ async function main() {
 
   console.log('Fetching ESPN schedule page:', url);
   const html = await fetchUrl(url);
-
-  // Try to build a simple text table by collapsing HTML tags to pipe-separated text.
-  // ESPN's fetched content will include table rows like: | Tue, Oct 7 | vs Chicago Chicago | ...
-  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/\|/g, '|');
-
-  // Regex to match rows with date and opponent. Two table formats exist on ESPN pages:
-  // 1) Past games: | Tue, Oct 7 | vs Chicago Chicago | W3-2 | ...
-  // 2) Future games: | Thu, Jan 22 | @ Winnipeg Winnipeg | 8:00 PM | ...
-  const rowRe = /\|\s*([A-Za-z]{3}),\s*([A-Za-z]{3})\s+(\d{1,2})\s*\|\s*(vs|@)\s+([A-Za-z\s\.\'\-]+?)\s*(?:\|\s*([^|]{1,20})\s*\|)?/g;
-
-  const matches = [];
-  let m;
-  while ((m = rowRe.exec(text))) {
-    const weekday = m[1];
-    const monthShort = m[2];
-    const day = m[3];
-    const homeAway = m[4];
-    const opponentFull = m[5].trim();
-    const thirdCol = (m[6] || '').trim();
-
-    // Determine if thirdCol is a time (contains colon + AM/PM)
-    const timeMatch = thirdCol.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
-    const time = timeMatch ? timeMatch[1].toUpperCase() : null;
-
-    matches.push({ monthShort, day, homeAway, opponentFull, time });
-  }
-
+  const cheerio = require('cheerio');
+  const $ = cheerio.load(html);
+  let matches = [];
+  // Find all tables with schedule rows
+  $('table').each((i, table) => {
+    $(table).find('tr').each((j, row) => {
+      const cells = $(row).find('td');
+      if (cells.length >= 3) {
+        // Try to parse: DATE | OPPONENT | TIME (or RESULT)
+        const dateCell = $(cells[0]).text().trim();
+        const opponentCell = $(cells[1]).text().trim();
+        // Find time cell (future games) or result cell (past games)
+        let timeCell = '';
+        if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test($(cells[2]).text())) {
+          timeCell = $(cells[2]).text().trim();
+        } else if (cells.length > 3 && /\d{1,2}:\d{2}\s*(AM|PM)/i.test($(cells[3]).text())) {
+          timeCell = $(cells[3]).text().trim();
+        }
+        // Parse date: e.g., 'Thu, Feb 26'
+        const dateMatch = dateCell.match(/([A-Za-z]{3}),\s*([A-Za-z]{3})\s*(\d{1,2})/);
+        if (dateMatch && opponentCell && timeCell) {
+          matches.push({
+            monthShort: dateMatch[2],
+            day: dateMatch[3],
+            homeAway: opponentCell.startsWith('vs') ? 'vs' : 'at',
+            opponentFull: opponentCell.replace(/^(vs|@)\s+/, ''),
+            time: timeCell
+          });
+        }
+      }
+    });
+  });
   if (matches.length === 0) {
     console.error('No schedule rows parsed from ESPN page. The page layout may differ.');
     process.exit(1);

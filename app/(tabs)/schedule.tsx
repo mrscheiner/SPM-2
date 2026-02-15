@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { AppColors } from "@/constants/appColors";
 import { useSeasonPass } from "@/providers/SeasonPassProvider";
@@ -249,9 +250,10 @@ interface ComputedGame extends Game {
 }
 
 export default function ScheduleScreen() {
-  const { activeSeasonPass, addSaleRecord, removeSaleRecord } = useSeasonPass();
+  const { activeSeasonPass, addSaleRecord, removeSaleRecord, resyncSchedule, isLoadingSchedule } = useSeasonPass();
   const [selectedFilter, setSelectedFilter] = useState<string>('All Games');
   const [searchQuery, setSearchQuery] = useState('');
+  const lastResyncTime = useRef<number>(0);
   
   // Create a stable hash of salesData to trigger recalculation when sales change
   const salesDataHash = useMemo(() => {
@@ -261,6 +263,47 @@ export default function ScheduleScreen() {
   const [selectedGame, setSelectedGame] = useState<ComputedGame | null>(null);
   const [editingPrices, setEditingPrices] = useState<Record<string, string>>({});
   const [editingStatuses, setEditingStatuses] = useState<Record<string, 'Pending' | 'Paid'>>({});
+
+  // Automatically resync schedule when viewing the schedule screen to ensure complete home schedule is displayed
+  useFocusEffect(
+    useCallback(() => {
+      const autoResyncSchedule = async () => {
+        if (!activeSeasonPass || isLoadingSchedule) {
+          return;
+        }
+
+        const now = Date.now();
+        const timeSinceLastResync = now - lastResyncTime.current;
+        const RESYNC_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+
+        // Only resync if it's been more than 5 minutes since the last resync
+        if (timeSinceLastResync < RESYNC_COOLDOWN) {
+          console.log('[Schedule] Skipping auto-resync, last resync was', Math.round(timeSinceLastResync / 1000), 'seconds ago');
+          return;
+        }
+
+        console.log('[Schedule] Auto-resyncing schedule to ensure complete home schedule is displayed');
+        lastResyncTime.current = now;
+        
+        try {
+          const result = await resyncSchedule(activeSeasonPass.id);
+          if (result.success) {
+            console.log('[Schedule] Auto-resync successful');
+          } else {
+            console.log('[Schedule] Auto-resync failed:', result.error);
+          }
+        } catch (error) {
+          console.log('[Schedule] Auto-resync error:', error);
+          // Reset the last resync time on error so we can try again
+          lastResyncTime.current = 0;
+        }
+      };
+
+      // Small delay to avoid resyncing too frequently
+      const timeoutId = setTimeout(autoResyncSchedule, 1000);
+      return () => clearTimeout(timeoutId);
+    }, [isLoadingSchedule, resyncSchedule, activeSeasonPass])
+  );
 
   const computedGames = useMemo((): ComputedGame[] => {
     if (!activeSeasonPass) return [];

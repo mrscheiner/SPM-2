@@ -42,4 +42,12 @@ yarn-error.*
 
 .env
 rork-eslint.config.js
-core
+coreasc-api-key.json
+server.log
+server.js
+ios/Pods/
+ios/build/
+package-lock.json
+.env.local
+.env.development
+.env.production

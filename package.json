@@ -3,8 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p w5ewsvexbvu3fzyp4wznk --tunnel",
-    "start-web": "bunx rork start -p w5ewsvexbvu3fzyp4wznk --web --tunnel",
+    "start": "bun backend/hono.ts",
+    "start-web": "bun run backend/hono.ts",
     "dev:clear": "npx expo start -c",
     "tail:logs": "tail -f ./start.log | rg '\\[Schedule Debug\\]|\\[Schedule\\]' || tail -f ./start.log",
     "watch-schedule": "node ./scripts/watch-and-reload.js",
@@ -18,23 +18,26 @@
     "fetch:panthers-team": "node ./scripts/fetchTeamSiteSchedule.js --url=https://www.floridapanthers.com/schedule --season=20252026",
     "fetch:panthers-ticketmaster": "node ./scripts/fetchTicketmasterSchedule.js --keyword=Florida%20Panthers --season=20252026",
     "fetch:tm-schedules": "node ./scripts/fetchAllLeaguesTicketmaster.js --season=20252026 --out=./constants/seasonPassSchedules_20252026_ticketmaster.ts",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p w5ewsvexbvu3fzyp4wznk --web --tunnel",
+    "start-web-dev": "bun run backend/hono.ts",
     "make:recovery:from-json": "node ./scripts/recovery-from-json.js",
     "lint": "expo lint",
-    "test:backfill": "node ./scripts/test-backfill.js"
+    "test:backfill": "node ./scripts/test-backfill.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@hono/trpc-server": "^0.4.2",
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@rork-ai/toolkit-sdk": "^0.2.51",
+    "@rork-ai/toolkit-sdk": "^0.2.54",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@tanstack/react-query": "^5.90.19",
     "@trpc/client": "^11.8.1",
     "@trpc/react-query": "^11.8.1",
     "@trpc/server": "^11.8.1",
     "@ungap/structured-clone": "^1.3.0",
+    "cheerio": "^1.2.0",
     "expo": "~54.0.27",
     "expo-blur": "~15.0.8",
     "expo-clipboard": "~8.0.8",
@@ -55,6 +58,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
+    "expo-updates": "~29.0.16",
     "expo-web-browser": "~15.0.10",
     "hono": "^4.11.4",
     "lucide-react-native": "^0.475.0",
@@ -77,10 +81,13 @@
     "@babel/core": "^7.25.2",
     "@expo/cli": "^54.0.21",
     "@expo/ngrok": "^4.1.0",
+    "@hono/node-server": "^1.19.9",
     "@types/react": "~19.1.10",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.2",
+    "wrangler": "^4.65.0"
   },
   "private": true
 }

@@ -1,0 +1,6 @@
+name = "spm2-backend"
+main = "backend/hono.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+TICKETMASTER_API_KEY = ""

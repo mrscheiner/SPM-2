@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SPM 1",
-    "slug": "spm-1",
+    "name": "SPM 2",
+    "slug": "spm-2",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,15 +15,23 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.spm-1"
+      "bundleIdentifier": "app.rork.spm-2",
+      "buildNumber": "3",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.spm_1",
+      "package": "app.rork.spm_2",
       "permissions": [
+        "android.permission.VIBRATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
         "android.permission.VIBRATE",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
@@ -45,6 +53,22 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": "https://rork.com/"
+      },
+      "eas": {
+        "projectId": "63874b54-f864-44b9-83ae-3be640ad9b65"
+      },
+      "EXPO_PUBLIC_RORK_API_BASE_URL": "http://localhost:3000"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/63874b54-f864-44b9-83ae-3be640ad9b65"
+    },
+    "owner": "mrscheiner"
   }
 }
