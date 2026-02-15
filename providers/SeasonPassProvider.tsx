@@ -2784,8 +2784,26 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
       );
       
       if (!panthersPass) {
-        console.error('[SeasonPass] No Panthers 2025-2026 pass found to replace');
-        return { success: false, salesCount: 0 };
+        console.warn('[SeasonPass] No Panthers 2025-2026 pass found to replace - creating new pass from canonical seed');
+        const seeded = await safeSeedPanthersIfEmpty();
+        if (!seeded) {
+          console.error('[SeasonPass] Failed to create seeded Panthers pass');
+          return { success: false, salesCount: 0 };
+        }
+        // add seeded pass to list
+        const updatedPassesWithSeed = [...seasonPasses, seeded];
+        // persist immediately so subsequent steps operate against a pass list that contains the seeded pass
+        await AsyncStorage.setItem(SEASON_PASSES_KEY, JSON.stringify(updatedPassesWithSeed));
+        await AsyncStorage.setItem(ACTIVE_PASS_KEY, JSON.stringify(seeded.id));
+        await AsyncStorage.setItem(DATA_IMPORTED_KEY, 'true');
+        // assign panthersPass for the rest of the flow
+        // Note: do not reassign seasonPasses variable here (we'll rebuild later when saving final updatedPasses)
+        // Use seeded for the rest of the replacement
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        // (shadow panthersPass name)
+        // @ts-ignore
+        panthersPass = seeded;
+        console.log('[SeasonPass] Seeded new Panthers pass:', seeded.id);
       }
       
       console.log('[SeasonPass] Found Panthers pass:', panthersPass.id);
