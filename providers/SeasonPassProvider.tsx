@@ -15,6 +15,7 @@ import LZString from 'lz-string';
 import { Platform, Alert } from 'react-native';
 import { trpcClient } from '@/lib/trpc';
 import { parseSeatsCount } from '@/lib/seats';
+import { resetToCanonicalData } from '@/lib/canonicalBootstrap';
 
 const BACKUP_VERSION = '1.0';
 
@@ -722,7 +723,9 @@ try {
   function collect(x: any) {
     if (x && typeof x === 'object') {
       if (Array.isArray(x)) { x.forEach(collect); return; }
-      if (typeof x.totalPrice === 'number' || typeof x.price === 'number') { candidates.push(x); return; }
+      const hasNumericTotal = typeof x.totalPrice === 'number' || (typeof x.totalPrice === 'string' && /^\s*\d/.test(x.totalPrice));
+      const hasNumericPrice = typeof x.price === 'number' || (typeof x.price === 'string' && /^\s*\d/.test(x.price));
+      if (hasNumericTotal || hasNumericPrice) { candidates.push(x); return; }
       Object.values(x).forEach(collect);
     }
   }
@@ -751,7 +754,11 @@ try {
   }
 
   DYNAMIC_PANTHERS_TICKET_SALES_SEED = candidates.map((o: any) => {
-    const totalPrice = typeof o.totalPrice === 'number' ? o.totalPrice : (typeof o.price === 'number' ? o.price : 0);
+    let totalPrice = 0;
+    if (o.totalPrice != null) totalPrice = Number(o.totalPrice);
+    else if (o.price != null) totalPrice = Number(o.price);
+    else if (o.priceTotal != null) totalPrice = Number(o.priceTotal);
+    if (!Number.isFinite(totalPrice)) totalPrice = 0;
     const eventName = o.eventName || o.event_name || o.name || o.event || '';
     const eventStartTime = o.eventStartTime || o.event_start_time || o.startTime || o.date || o.dateTimeISO || '';
     let tickets: { section: string; row: string; seat_number: number }[] = [];
@@ -773,7 +780,7 @@ try {
       }
     }
 
-    return { totalPrice: Math.round((Number(totalPrice) || 0) * 100) / 100, eventName, eventStartTime, tickets };
+    return { totalPrice: Math.round(totalPrice * 100) / 100, eventName, eventStartTime, tickets };
   });
 } catch (e) {
   DYNAMIC_PANTHERS_TICKET_SALES_SEED = null;
@@ -991,6 +998,7 @@ function buildSalesDataFromTicketSaleSeedRows(
       seatsStr = seatNums.join(',');
     }
 
+    const priceVal = Number(row.totalPrice ?? row.price ?? 0);
     const sale: SaleRecord = {
       id: `${game.id}_${seatPair.id}`,
       gameId: game.id,
@@ -1000,7 +1008,7 @@ function buildSalesDataFromTicketSaleSeedRows(
       seats: seatsStr,
       seatCount: parseSeatsCount(seatsStr),
       opponentLogo: game.opponentLogo,
-      price: Number(row.totalPrice) || 0,
+      price: Number.isFinite(priceVal) ? priceVal : 0,
       paymentStatus: 'Paid',
       soldDate: row.eventStartTime,
     };
@@ -1570,6 +1578,46 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
 
   // Normalize passes to ensure `games` and related fields always exist
   passes = passes.map(normalizeSeasonPass);
+
+  // Auto-detect obviously corrupted/zeroed sales data and reseed to canonical data.
+  // Use `isIntentionalClear` as a guard to avoid infinite reseed loops.
+  try {
+    if (!isIntentionalClear.current && passes.length > 0) {
+      let totalPrice = 0;
+      let priceEntries = 0;
+      let totalSeats = 0;
+      for (const p of passes) {
+        const sales = p.salesData || {};
+        for (const gameId of Object.keys(sales)) {
+          const gameSales = (sales as any)[gameId] || {};
+          for (const pairId of Object.keys(gameSales)) {
+            const sale = gameSales[pairId];
+            if (!sale) continue;
+            const priceVal = Number(sale.price ?? sale.totalPrice ?? sale.priceVal ?? 0);
+            if (Number.isFinite(priceVal) && priceVal > 0) {
+              totalPrice += priceVal;
+              priceEntries++;
+            }
+            if (typeof sale.seatCount === 'number' && sale.seatCount > 0) totalSeats += sale.seatCount;
+          }
+        }
+      }
+      console.log('[SeasonPass] Auto-check: priceEntries=', priceEntries, ' totalPrice=', totalPrice, ' totalSeats=', totalSeats);
+      // If there are no positive prices or no seats at all, assume data is corrupted and reseed
+      if (priceEntries === 0 || totalPrice <= 0 || totalSeats === 0) {
+        console.warn('[SeasonPass] Detected zeroed/corrupted sales data — performing canonical reseed');
+        isIntentionalClear.current = true;
+        const ok = await resetToCanonicalData();
+        if (ok) {
+          console.log('[SeasonPass] Canonical reseed applied, reloading storage...');
+          await loadData();
+          return;
+        }
+      }
+    }
+  } catch (autoErr) {
+    console.warn('[SeasonPass] Auto-reseed check failed:', autoErr);
+  }
 
   // Helper: robustly find a team logo URL for a given opponent string and league
   const findLogoForOpponent = (opponentText: string | undefined, leagueId?: string): string | undefined => {
