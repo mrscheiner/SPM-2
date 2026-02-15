@@ -727,16 +727,52 @@ try {
     }
   }
   collect(raw);
+  function parseSeatsString(seatsRaw: string): number[] {
+    const out: number[] = [];
+    if (!seatsRaw || typeof seatsRaw !== 'string') return out;
+    // normalize separators
+    const parts = seatsRaw.split(/[,;\|]/).map((p) => p.trim()).filter(Boolean);
+    for (const p of parts) {
+      const rangeMatch = p.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rangeMatch) {
+        const a = Number(rangeMatch[1]);
+        const b = Number(rangeMatch[2]);
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+          const start = Math.min(a, b);
+          const end = Math.max(a, b);
+          for (let n = start; n <= end; n++) out.push(n);
+          continue;
+        }
+      }
+      const num = Number(p.match(/\d+/)?.[0] || NaN);
+      if (Number.isFinite(num)) out.push(num);
+    }
+    return out;
+  }
+
   DYNAMIC_PANTHERS_TICKET_SALES_SEED = candidates.map((o: any) => {
     const totalPrice = typeof o.totalPrice === 'number' ? o.totalPrice : (typeof o.price === 'number' ? o.price : 0);
     const eventName = o.eventName || o.event_name || o.name || o.event || '';
     const eventStartTime = o.eventStartTime || o.event_start_time || o.startTime || o.date || o.dateTimeISO || '';
     let tickets: { section: string; row: string; seat_number: number }[] = [];
+
     if (Array.isArray(o.tickets) && o.tickets.length) {
       tickets = o.tickets.map((t: any) => ({ section: String(t.section || ''), row: String(t.row || ''), seat_number: Number(t.seat_number || t.seat || t.seatNumber || 0) }));
     } else if (Array.isArray(o.seatPairs)) {
       tickets = o.seatPairs.flatMap((sp: any) => (sp.seats || []).map((s: any) => ({ section: sp.section || '', row: sp.row || '', seat_number: Number(s) })));
+    } else if (typeof o.seats === 'string' && (o.section || o.row || o.seatCount)) {
+      // Example input: "24-25" or "24,25"; prefer explicit section/row if provided
+      const seatNumbers = parseSeatsString(o.seats);
+      const sectionVal = o.section || o.sectionName || '';
+      const rowVal = o.row || o.rowName || '';
+      if (seatNumbers.length) {
+        tickets = seatNumbers.map((n) => ({ section: String(sectionVal), row: String(rowVal), seat_number: Number(n) }));
+      } else if (typeof o.seatCount === 'number' && o.seatCount > 0) {
+        // fallback: create placeholder seats if only seatCount provided
+        for (let i = 0; i < Number(o.seatCount); i++) tickets.push({ section: String(o.section || ''), row: String(o.row || ''), seat_number: i + 1 });
+      }
     }
+
     return { totalPrice: Math.round((Number(totalPrice) || 0) * 100) / 100, eventName, eventStartTime, tickets };
   });
 } catch (e) {
