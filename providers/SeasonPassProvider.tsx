@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { SeasonPass, SeatPair, SaleRecord, Game, Event, League, Team } from '@/constants/types';
-import { loadSalesData, SalesDataRow } from '@/lib/loadSalesData';
+import { loadSalesData } from '@/lib/loadSalesData';
 import { LEAGUES, getTeamsByLeague, NHL_TEAMS } from '@/constants/leagues';
 import { PANTHERS_20252026_SCHEDULE } from '@/constants/panthersSchedule';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -15,7 +15,6 @@ import LZString from 'lz-string';
 import { Platform, Alert } from 'react-native';
 import { trpcClient } from '@/lib/trpc';
 import { parseSeatsCount } from '@/lib/seats';
-import { resetToCanonicalData } from '@/lib/canonicalBootstrap';
 
 const BACKUP_VERSION = '1.0';
 
@@ -82,46 +81,8 @@ async function fetchScheduleViaESPN(pass: {
     try {
       result = await trpcClient.espn.getFullSchedule.query(trpcInput);
     } catch (fetchErr: any) {
-      console.log('[ScheduleFetch] ESPN tRPC unavailable:', fetchErr?.message || 'Network error');
-      // Try compatibility REST endpoint as fallback
-      try {
-        const compatUrl = `${baseUrl.replace(/\/$/, '')}/compat/espn/getFullSchedule`;
-        console.log('[ScheduleFetch] Trying compat ESPN POST at', compatUrl);
-        const resp = await fetch(compatUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(trpcInput),
-        });
-        if (!resp.ok) {
-          console.log('[ScheduleFetch] compat ESPN fetch returned non-ok', resp.status);
-          return { games: [], error: 'NETWORK' };
-        }
-        const compat = await resp.json();
-        if (compat.error || !compat.events || compat.events.length === 0) {
-          console.log('[ScheduleFetch] compat ESPN returned error or no events:', compat.error);
-          return { games: [], error: 'NO_SCHEDULE' };
-        }
-        const games: Game[] = (compat.events || []).map((ev: any) => ({
-          id: ev.id,
-          date: ev.date,
-          month: ev.month,
-          day: ev.day,
-          opponent: ev.opponent,
-          opponentLogo: ev.opponentLogo,
-          venueName: ev.venueName,
-          time: ev.time,
-          ticketStatus: ev.ticketStatus || 'Available',
-          isPaid: ev.isPaid || false,
-          gameNumber: ev.gameNumber,
-          type: ev.type,
-          dateTimeISO: ev.dateTimeISO,
-        }));
-        console.log('[ScheduleFetch] ✅ compat ESPN mapped', games.length, 'games');
-        return { games, error: null };
-      } catch (compatErr) {
-        console.log('[ScheduleFetch] compat ESPN fetch failed:', String(compatErr));
-        return { games: [], error: 'NETWORK' };
-      }
+      console.log('[ScheduleFetch] ESPN backend unavailable:', fetchErr?.message || 'Network error');
+      return { games: [], error: 'NETWORK' };
     }
     const elapsed = Date.now() - startTime;
     console.log('[ScheduleFetch] ✅ ESPN tRPC call completed in', elapsed, 'ms');
@@ -195,48 +156,8 @@ async function fetchScheduleViaTicketmaster(pass: {
     try {
       result = await trpcClient.ticketmaster.getSchedule.query(trpcInput);
     } catch (fetchErr: any) {
-      console.log('[ScheduleFetch] Ticketmaster tRPC unavailable:', fetchErr?.message || 'Network error');
-      // Try compatibility REST endpoint as fallback
-      try {
-        const compatUrl = `${baseUrl.replace(/\/$/, '')}/compat/tm/getSchedule`;
-        console.log('[ScheduleFetch] Trying compat TM POST at', compatUrl);
-        const resp = await fetch(compatUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(trpcInput),
-        });
-        if (!resp.ok) {
-          console.log('[ScheduleFetch] compat TM fetch returned non-ok', resp.status);
-          return { games: [], error: 'NETWORK' };
-        }
-        const compat = await resp.json();
-        if (compat.error) {
-          console.log('[ScheduleFetch] compat TM returned error:', compat.error);
-          let mappedError: ScheduleFetchResult['error'] = 'NO_SCHEDULE';
-          if (compat.error === 'API_KEY_MISSING') mappedError = 'API_KEY_MISSING';
-          return { games: [], error: mappedError };
-        }
-        const games: Game[] = (compat.events || []).map((ev: any) => ({
-          id: ev.id,
-          date: ev.date,
-          month: ev.month,
-          day: ev.day,
-          opponent: ev.opponent,
-          opponentLogo: ev.opponentLogo,
-          venueName: ev.venueName,
-          time: ev.time,
-          ticketStatus: ev.ticketStatus || 'Available',
-          isPaid: ev.isPaid || false,
-          gameNumber: ev.gameNumber,
-          type: ev.type,
-          dateTimeISO: ev.dateTimeISO,
-        }));
-        console.log('[ScheduleFetch] ✅ compat TM mapped', games.length, 'games');
-        return { games, error: null };
-      } catch (compatErr) {
-        console.log('[ScheduleFetch] compat TM fetch failed:', String(compatErr));
-        return { games: [], error: 'NETWORK' };
-      }
+      console.log('[ScheduleFetch] Ticketmaster backend unavailable:', fetchErr?.message || 'Network error');
+      return { games: [], error: 'NETWORK' };
     }
     const elapsed = Date.now() - startTime;
     console.log('[ScheduleFetch] ✅ Ticketmaster tRPC call completed in', elapsed, 'ms');
@@ -294,15 +215,6 @@ async function fetchScheduleViaBackend(pass: {
   teamAbbreviation?: string;
 }): Promise<ScheduleFetchResult> {
   console.log('[ScheduleFetch] ========== COMBINED FETCH START ==========');
-  
-  const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-  console.log('[ScheduleFetch] EXPO_PUBLIC_RORK_API_BASE_URL:', baseUrl);
-  
-  if (!baseUrl) {
-    console.log('[ScheduleFetch] ❌ EXPO_PUBLIC_RORK_API_BASE_URL is not set - returning NETWORK error');
-    return { games: [], error: 'NETWORK' };
-  }
-  
   console.log('[ScheduleFetch] Trying ESPN first (primary source)...');
   
   // Try ESPN first (free, reliable)
@@ -715,77 +627,6 @@ type TicketSaleSeedRow = {
   tickets: { section: string; row: string; seat_number: number }[];
 };
 
-let DYNAMIC_PANTHERS_TICKET_SALES_SEED: TicketSaleSeedRow[] | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const raw = require('../scripts/panthers_seed.json');
-  const candidates: any[] = [];
-  function collect(x: any) {
-    if (x && typeof x === 'object') {
-      if (Array.isArray(x)) { x.forEach(collect); return; }
-      const hasNumericTotal = typeof x.totalPrice === 'number' || (typeof x.totalPrice === 'string' && /^\s*\d/.test(x.totalPrice));
-      const hasNumericPrice = typeof x.price === 'number' || (typeof x.price === 'string' && /^\s*\d/.test(x.price));
-      if (hasNumericTotal || hasNumericPrice) { candidates.push(x); return; }
-      Object.values(x).forEach(collect);
-    }
-  }
-  collect(raw);
-  function parseSeatsString(seatsRaw: string): number[] {
-    const out: number[] = [];
-    if (!seatsRaw || typeof seatsRaw !== 'string') return out;
-    // normalize separators
-    const parts = seatsRaw.split(/[,;\|]/).map((p) => p.trim()).filter(Boolean);
-    for (const p of parts) {
-      const rangeMatch = p.match(/^(\d+)\s*-\s*(\d+)$/);
-      if (rangeMatch) {
-        const a = Number(rangeMatch[1]);
-        const b = Number(rangeMatch[2]);
-        if (Number.isFinite(a) && Number.isFinite(b)) {
-          const start = Math.min(a, b);
-          const end = Math.max(a, b);
-          for (let n = start; n <= end; n++) out.push(n);
-          continue;
-        }
-      }
-      const num = Number(p.match(/\d+/)?.[0] || NaN);
-      if (Number.isFinite(num)) out.push(num);
-    }
-    return out;
-  }
-
-  DYNAMIC_PANTHERS_TICKET_SALES_SEED = candidates.map((o: any) => {
-    let totalPrice = 0;
-    if (o.totalPrice != null) totalPrice = Number(o.totalPrice);
-    else if (o.price != null) totalPrice = Number(o.price);
-    else if (o.priceTotal != null) totalPrice = Number(o.priceTotal);
-    if (!Number.isFinite(totalPrice)) totalPrice = 0;
-    const eventName = o.eventName || o.event_name || o.name || o.event || '';
-    const eventStartTime = o.eventStartTime || o.event_start_time || o.startTime || o.date || o.dateTimeISO || '';
-    let tickets: { section: string; row: string; seat_number: number }[] = [];
-
-    if (Array.isArray(o.tickets) && o.tickets.length) {
-      tickets = o.tickets.map((t: any) => ({ section: String(t.section || ''), row: String(t.row || ''), seat_number: Number(t.seat_number || t.seat || t.seatNumber || 0) }));
-    } else if (Array.isArray(o.seatPairs)) {
-      tickets = o.seatPairs.flatMap((sp: any) => (sp.seats || []).map((s: any) => ({ section: sp.section || '', row: sp.row || '', seat_number: Number(s) })));
-    } else if (typeof o.seats === 'string' && (o.section || o.row || o.seatCount)) {
-      // Example input: "24-25" or "24,25"; prefer explicit section/row if provided
-      const seatNumbers = parseSeatsString(o.seats);
-      const sectionVal = o.section || o.sectionName || '';
-      const rowVal = o.row || o.rowName || '';
-      if (seatNumbers.length) {
-        tickets = seatNumbers.map((n) => ({ section: String(sectionVal), row: String(rowVal), seat_number: Number(n) }));
-      } else if (typeof o.seatCount === 'number' && o.seatCount > 0) {
-        // fallback: create placeholder seats if only seatCount provided
-        for (let i = 0; i < Number(o.seatCount); i++) tickets.push({ section: String(o.section || ''), row: String(o.row || ''), seat_number: i + 1 });
-      }
-    }
-
-    return { totalPrice: Math.round(totalPrice * 100) / 100, eventName, eventStartTime, tickets };
-  });
-} catch (e) {
-  DYNAMIC_PANTHERS_TICKET_SALES_SEED = null;
-}
-
 const PANTHERS_TICKET_SALES_SEED: TicketSaleSeedRow[] = [
   { totalPrice: 120.58, eventName: 'Boston Bruins at Florida Panthers', eventStartTime: '2026-02-05T00:00:00.000Z', tickets: [{ section: '325', row: '5', seat_number: 6 }, { section: '325', row: '5', seat_number: 7 }] },
   { totalPrice: 73.64, eventName: 'Utah Mammoth at Florida Panthers', eventStartTime: '2026-01-28T00:00:00.000Z', tickets: [{ section: '325', row: '5', seat_number: 6 }, { section: '325', row: '5', seat_number: 7 }] },
@@ -998,7 +839,6 @@ function buildSalesDataFromTicketSaleSeedRows(
       seatsStr = seatNums.join(',');
     }
 
-    const priceVal = Number(row.totalPrice ?? row.price ?? 0);
     const sale: SaleRecord = {
       id: `${game.id}_${seatPair.id}`,
       gameId: game.id,
@@ -1008,7 +848,7 @@ function buildSalesDataFromTicketSaleSeedRows(
       seats: seatsStr,
       seatCount: parseSeatsCount(seatsStr),
       opponentLogo: game.opponentLogo,
-      price: Number.isFinite(priceVal) ? priceVal : 0,
+      price: Number(row.totalPrice) || 0,
       paymentStatus: 'Paid',
       soldDate: row.eventStartTime,
     };
@@ -1028,8 +868,7 @@ function buildSalesDataFromTicketSaleSeedRows(
 }
 
 function buildCanonicalPanthersSalesData(games: Game[], seatPairs: SeatPair[]): Record<string, Record<string, SaleRecord>> {
-  const seedToUse = (DYNAMIC_PANTHERS_TICKET_SALES_SEED && DYNAMIC_PANTHERS_TICKET_SALES_SEED.length) ? DYNAMIC_PANTHERS_TICKET_SALES_SEED : PANTHERS_TICKET_SALES_SEED;
-  return buildSalesDataFromTicketSaleSeedRows(seedToUse as TicketSaleSeedRow[], games, seatPairs);
+  return buildSalesDataFromTicketSaleSeedRows(PANTHERS_TICKET_SALES_SEED, games, seatPairs);
 }
 
 function parseTicketSaleSeedText(raw: string): TicketSaleSeedRow[] {
@@ -1579,46 +1418,6 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
   // Normalize passes to ensure `games` and related fields always exist
   passes = passes.map(normalizeSeasonPass);
 
-  // Auto-detect obviously corrupted/zeroed sales data and reseed to canonical data.
-  // Use `isIntentionalClear` as a guard to avoid infinite reseed loops.
-  try {
-    if (!isIntentionalClear.current && passes.length > 0) {
-      let totalPrice = 0;
-      let priceEntries = 0;
-      let totalSeats = 0;
-      for (const p of passes) {
-        const sales = p.salesData || {};
-        for (const gameId of Object.keys(sales)) {
-          const gameSales = (sales as any)[gameId] || {};
-          for (const pairId of Object.keys(gameSales)) {
-            const sale = gameSales[pairId];
-            if (!sale) continue;
-            const priceVal = Number(sale.price ?? sale.totalPrice ?? sale.priceVal ?? 0);
-            if (Number.isFinite(priceVal) && priceVal > 0) {
-              totalPrice += priceVal;
-              priceEntries++;
-            }
-            if (typeof sale.seatCount === 'number' && sale.seatCount > 0) totalSeats += sale.seatCount;
-          }
-        }
-      }
-      console.log('[SeasonPass] Auto-check: priceEntries=', priceEntries, ' totalPrice=', totalPrice, ' totalSeats=', totalSeats);
-      // If there are no positive prices or no seats at all, assume data is corrupted and reseed
-      if (priceEntries === 0 || totalPrice <= 0 || totalSeats === 0) {
-        console.warn('[SeasonPass] Detected zeroed/corrupted sales data — performing canonical reseed');
-        isIntentionalClear.current = true;
-        const ok = await resetToCanonicalData();
-        if (ok) {
-          console.log('[SeasonPass] Canonical reseed applied, reloading storage...');
-          await loadData();
-          return;
-        }
-      }
-    }
-  } catch (autoErr) {
-    console.warn('[SeasonPass] Auto-reseed check failed:', autoErr);
-  }
-
   // Helper: robustly find a team logo URL for a given opponent string and league
   const findLogoForOpponent = (opponentText: string | undefined, leagueId?: string): string | undefined => {
     if (!opponentText) return undefined;
@@ -1992,9 +1791,9 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
           teamName: team.name,
           teamAbbreviation: team.abbreviation,
         });
-        games = result.games;
-        // Try to populate opponent logos immediately for fetched schedules
-        games = fillOpponentLogosForLeague(games, league.id);
+  games = result.games;
+  // Try to populate opponent logos immediately for fetched schedules
+  games = fillOpponentLogosForLeague(games, league.id);
         
         if (result.error && games.length === 0) {
           if (result.error === 'NETWORK') {
@@ -2784,26 +2583,8 @@ export const [SeasonPassProvider, useSeasonPass] = createContextHook(() => {
       );
       
       if (!panthersPass) {
-        console.warn('[SeasonPass] No Panthers 2025-2026 pass found to replace - creating new pass from canonical seed');
-        const seeded = await safeSeedPanthersIfEmpty();
-        if (!seeded) {
-          console.error('[SeasonPass] Failed to create seeded Panthers pass');
-          return { success: false, salesCount: 0 };
-        }
-        // add seeded pass to list
-        const updatedPassesWithSeed = [...seasonPasses, seeded];
-        // persist immediately so subsequent steps operate against a pass list that contains the seeded pass
-        await AsyncStorage.setItem(SEASON_PASSES_KEY, JSON.stringify(updatedPassesWithSeed));
-        await AsyncStorage.setItem(ACTIVE_PASS_KEY, JSON.stringify(seeded.id));
-        await AsyncStorage.setItem(DATA_IMPORTED_KEY, 'true');
-        // assign panthersPass for the rest of the flow
-        // Note: do not reassign seasonPasses variable here (we'll rebuild later when saving final updatedPasses)
-        // Use seeded for the rest of the replacement
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        // (shadow panthersPass name)
-        // @ts-ignore
-        panthersPass = seeded;
-        console.log('[SeasonPass] Seeded new Panthers pass:', seeded.id);
+        console.error('[SeasonPass] No Panthers 2025-2026 pass found to replace');
+        return { success: false, salesCount: 0 };
       }
       
       console.log('[SeasonPass] Found Panthers pass:', panthersPass.id);

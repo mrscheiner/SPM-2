@@ -45,7 +45,25 @@ export async function checkAndSeedCanonicalData(): Promise<boolean> {
     console.log('[CanonicalBootstrap] Version mismatch — clearing and re-seeding...');
     await clearAppStorageKeys();
     await AsyncStorage.setItem(CANONICAL_VERSION_KEY, CANONICAL_DATA_VERSION);
-    console.log('[CanonicalBootstrap] ✅ Storage cleared, version set to', CANONICAL_DATA_VERSION);
+      // Attempt to populate storage from bundled panthers seed if available so the app restarts with expected data
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const seed: any = require('../scripts/panthers_seed.json');
+        if (seed && Array.isArray(seed.seasonPasses) && seed.seasonPasses.length > 0) {
+          await AsyncStorage.setItem('season_passes', JSON.stringify(seed.seasonPasses));
+          if (seed.activeSeasonPassId) await AsyncStorage.setItem('active_season_pass_id', JSON.stringify(seed.activeSeasonPassId));
+          await AsyncStorage.setItem('data_imported_v1', 'true');
+          const backupData = { timestamp: new Date().toISOString(), passCount: seed.seasonPasses.length, passes: seed.seasonPasses };
+          await AsyncStorage.setItem('all_passes_backup_v1', JSON.stringify(backupData));
+          const masterBackup = { version: CANONICAL_DATA_VERSION, createdAtISO: new Date().toISOString(), activeSeasonPassId: seed.activeSeasonPassId || (seed.seasonPasses[0] && seed.seasonPasses[0].id) || null, seasonPasses: seed.seasonPasses };
+          await AsyncStorage.setItem('master_backup_v1', JSON.stringify(masterBackup));
+          console.log('[CanonicalBootstrap] ✅ Seeded storage from bundled panthers_seed.json');
+        }
+      } catch (e) {
+        console.warn('[CanonicalBootstrap] No bundled panthers seed available to write to storage:', e instanceof Error ? e.message : String(e));
+      }
+
+      console.log('[CanonicalBootstrap] ✅ Storage cleared, version set to', CANONICAL_DATA_VERSION);
     return true;
   } catch (e) {
     console.error('[CanonicalBootstrap] Bootstrap error (non-fatal):', e);

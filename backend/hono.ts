@@ -56,6 +56,76 @@ app.get("/", (c) => {
   return c.json({ status: "ok", message: "API is running", timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint: summarize the runtime panthers seed JSON (if present)
+app.get('/debug/panthers-seed-summary', async (c) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const raw = require('../scripts/panthers_seed.json');
+    const candidates: any[] = [];
+    function collect(x: any) {
+      if (x && typeof x === 'object') {
+        if (Array.isArray(x)) { x.forEach(collect); return; }
+        if (typeof x.totalPrice === 'number' || typeof x.price === 'number' || (typeof x.totalPrice === 'string' && /^\s*\d/.test(x.totalPrice)) || (typeof x.price === 'string' && /^\s*\d/.test(x.price))) { candidates.push(x); return; }
+        Object.values(x).forEach(collect);
+      }
+    }
+    collect(raw);
+
+    function parseSeatsString(seatsRaw: string): number[] {
+      const out: number[] = [];
+      if (!seatsRaw || typeof seatsRaw !== 'string') return out;
+      const parts = seatsRaw.split(/[,;|]/).map((p: string) => p.trim()).filter(Boolean);
+      for (const p of parts) {
+        const rangeMatch = p.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (rangeMatch) {
+          const a = Number(rangeMatch[1]);
+          const b = Number(rangeMatch[2]);
+          if (Number.isFinite(a) && Number.isFinite(b)) {
+            const start = Math.min(a, b);
+            const end = Math.max(a, b);
+            for (let n = start; n <= end; n++) out.push(n);
+            continue;
+          }
+        }
+        const num = Number(p.match(/\d+/)?.[0] || NaN);
+        if (Number.isFinite(num)) out.push(num);
+      }
+      return out;
+    }
+
+    const mapped = candidates.map((o: any) => {
+      let totalPrice = 0;
+      if (o.totalPrice != null) totalPrice = Number(o.totalPrice);
+      else if (o.price != null) totalPrice = Number(o.price);
+      else if (o.priceTotal != null) totalPrice = Number(o.priceTotal);
+      if (!Number.isFinite(totalPrice)) totalPrice = 0;
+      let tickets: any[] = [];
+      if (Array.isArray(o.tickets) && o.tickets.length) {
+        tickets = o.tickets.map((t: any) => ({ section: String(t.section || ''), row: String(t.row || ''), seat_number: Number(t.seat_number || t.seat || t.seatNumber || 0) }));
+      } else if (Array.isArray(o.seatPairs)) {
+        tickets = o.seatPairs.flatMap((sp: any) => (sp.seats || []).map((s: any) => ({ section: sp.section || '', row: sp.row || '', seat_number: Number(s) })));
+      } else if (typeof o.seats === 'string' && (o.section || o.row || o.seatCount)) {
+        const seatNumbers = parseSeatsString(o.seats);
+        const sectionVal = o.section || o.sectionName || '';
+        const rowVal = o.row || o.rowName || '';
+        if (seatNumbers.length) tickets = seatNumbers.map((n) => ({ section: String(sectionVal), row: String(rowVal), seat_number: Number(n) }));
+        else if (typeof o.seatCount === 'number' && o.seatCount > 0) {
+          for (let i = 0; i < Number(o.seatCount); i++) tickets.push({ section: String(o.section || ''), row: String(o.row || ''), seat_number: i + 1 });
+        }
+      }
+      return { totalPrice: Math.round(totalPrice * 100) / 100, ticketsCount: tickets.length };
+    });
+
+    const total = mapped.reduce((s, r) => s + (Number(r.totalPrice) || 0), 0);
+    const seats = mapped.reduce((s, r) => s + (Number(r.ticketsCount) || 0), 0);
+
+    return c.json({ candidates: candidates.length, mapped: mapped.length, total, seats, sample: mapped.slice(0, 10) });
+  } catch (e: any) {
+    console.error('[DEBUG] panthers-seed-summary error:', e);
+    return c.json({ error: 'FAILED', message: String(e?.message || e) });
+  }
+});
+
 // Compatibility REST endpoint for POSTing schedule requests from clients that
 // cannot call tRPC queries via POST. Returns the same shape as the tRPC
 // procedures: { events: [...], error: null|string }
@@ -70,7 +140,10 @@ app.post('/compat/espn/getFullSchedule', async (c) => {
     const ESPN_SITE_BASE = 'https://site.api.espn.com/apis/site/v2';
     // fetch teams
     const teamsUrl = `${ESPN_SITE_BASE}/sports/${leagueId === 'usa.1' ? 'soccer' : (leagueId === 'nba' ? 'basketball' : leagueId)}/${leagueId}/teams`;
-    const teamsRes = await fetch(teamsUrl, { timeout: 15000 }).catch(() => null);
+    const teamsController = new AbortController();
+    const teamsTimeoutId = setTimeout(() => teamsController.abort(), 15000);
+    const teamsRes = await fetch(teamsUrl, { signal: teamsController.signal }).catch(() => null);
+    clearTimeout(teamsTimeoutId);
     if (!teamsRes || !teamsRes.ok) return c.json({ events: [], error: 'TEAMS_FETCH_FAILED' });
     const teamsData: any = await teamsRes.json();
     let teams: any[] = [];
@@ -92,7 +165,10 @@ app.post('/compat/espn/getFullSchedule', async (c) => {
     // Try season parameter and default
     const season = new Date().getFullYear();
     const scheduleUrl = `${ESPN_SITE_BASE}/sports/${leagueId === 'usa.1' ? 'soccer' : (leagueId === 'nba' ? 'basketball' : leagueId)}/${leagueId}/teams/${espnTeamId}/schedule?season=${season}`;
-    const schedRes = await fetch(scheduleUrl, { timeout: 20000 }).catch(() => null);
+    const schedController = new AbortController();
+    const schedTimeoutId = setTimeout(() => schedController.abort(), 20000);
+    const schedRes = await fetch(scheduleUrl, { signal: schedController.signal }).catch(() => null);
+    clearTimeout(schedTimeoutId);
     if (!schedRes || !schedRes.ok) return c.json({ events: [], error: 'SCHEDULE_FETCH_FAILED' });
     const schedData: any = await schedRes.json();
     const rawEvents: any[] = schedData?.events || [];

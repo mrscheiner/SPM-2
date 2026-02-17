@@ -521,9 +521,9 @@ export const espnRouter = createTRPCRouter({
           const comp = competitions[0];
           const competitors = comp?.competitors || [];
           // Only use team ID for home/away detection to avoid abbreviation mismatches
-          const ourTeam = competitors.find((c: any) => String(c?.team?.id) === espnTeamId);
+          const ourTeam = competitors.find((c: { team?: { id?: any }; homeAway?: string }) => String(c?.team?.id) === espnTeamId);
           if (!ourTeam) {
-            console.log(`[ESPN_FULL][DEBUG][FIX] Event #${idx} - our team not found in competitors by ID. Event:`, ev?.id, ev?.name, 'Competitors:', competitors.map(c => c?.team?.id));
+            console.log(`[ESPN_FULL][DEBUG][FIX] Event #${idx} - our team not found in competitors by ID. Event:`, ev?.id, ev?.name, 'Competitors:', competitors.map((c: { team?: { id?: any }; homeAway?: string }) => c?.team?.id));
           }
           const isHome = ourTeam?.homeAway === 'home';
           if (isHome) {

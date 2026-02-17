@@ -44,6 +44,13 @@ const TEAM_THEMES: Record<string, TeamTheme> = {
     gradient: ['#000000', '#FFB81C', '#000000'],
     textOnPrimary: '#000000',
   },
+  'bos-nba': {
+    primary: '#007A33',
+    secondary: '#BA9653',
+    accent: '#007A33',
+    gradient: ['#007A33', '#BA9653', '#007A33'],
+    textOnPrimary: '#FFFFFF',
+  },
   tor: {
     primary: '#00205B',
     secondary: '#FFFFFF',

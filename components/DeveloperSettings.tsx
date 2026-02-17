@@ -40,6 +40,11 @@ export default function DeveloperSettings() {
     clearAllData,
     reloadFromStorage,
     forceReplacePanthersSales,
+    restorePanthersFromSeedFile,
+    debugDumpStorage,
+    restoreFromAllPassesBackup,
+    populateGamesFromCanonical,
+    forcePopulateGamesFromCanonical,
   } = useSeasonPass();
 
   const [isExporting, setIsExporting] = useState(false);
@@ -245,7 +250,7 @@ export default function DeveloperSettings() {
                   onPress: async () => {
                     try {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                      const res: any = await forceReplacePanthersSales();
+                        const res: any = await forceReplacePanthersSales();
                       if (res && res.success) {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         Alert.alert('Replace Complete', `Inserted ${res.salesCount} sales records.`);
@@ -272,6 +277,142 @@ export default function DeveloperSettings() {
             <Text style={styles.settingDescription}>Wipe Panthers sales and re-seed from bundled JSON</Text>
           </View>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devCard, { marginTop: 8 }]}
+          onPress={async () => {
+            Alert.alert('Restore Panthers Seed File', 'This will write the bundled scripts/panthers_seed.json into app storage. Continue?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Restore',
+                onPress: async () => {
+                  try {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    const res: any = await restorePanthersFromSeedFile();
+                    if (res && res.success) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      Alert.alert('Restore Complete', `Inserted ${res.salesCount} sales records from seed file.`);
+                      await reloadFromStorage();
+                    } else {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      Alert.alert('Restore Failed', 'Could not restore from seed file. Check logs.');
+                    }
+                  } catch (e) {
+                    console.error('[DevSettings] restorePanthersFromSeedFile error:', e);
+                    Alert.alert('Error', 'Failed to restore seed file. See logs.');
+                  }
+                },
+              },
+            ]);
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#FFF3E0' }]}> 
+            <Database size={24} color="#FB8C00" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Restore Panthers Seed File</Text>
+            <Text style={styles.settingDescription}>Write bundled scripts/panthers_seed.json into storage</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devCard, { marginTop: 8 }]}
+          onPress={async () => {
+            try {
+              const res = await debugDumpStorage();
+              const msg = `passesCount: ${res.passesCount}\nactiveRaw: ${res.activeRaw ? res.activeRaw : 'null'}\nmasterBackup: ${res.masterRaw ? 'present' : 'missing'}\nallPassesBackup: ${res.allPassesRaw ? 'present' : 'missing'}\n\nsalesCount: ${res.totalSales}\ntotalRevenue: $${res.totalRevenue}\ntotalSeats: ${res.totalSeats}`;
+              Alert.alert('Storage Snapshot', msg, [{ text: 'OK' }]);
+            } catch (e) {
+              console.error('[DevSettings] debugDumpStorage error:', e);
+              Alert.alert('Error', 'Failed to read storage. See logs.');
+            }
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9' }]}> 
+            <Database size={24} color="#2E7D32" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Inspect Storage</Text>
+            <Text style={styles.settingDescription}>Show counts for season passes and backups</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* <TouchableOpacity
+          style={[styles.devCard, { marginTop: 8 }]}
+          onPress={async () => {
+            try {
+              const res: any = await restoreFromAllPassesBackup();
+              if (res && res.success) {
+                Alert.alert('Restore Complete', `Inserted ${res.salesCount} sales records from all-passes backup.`);
+                await reloadFromStorage();
+              } else {
+                Alert.alert('Restore Failed', 'Could not restore from all-passes backup. Check logs.');
+              }
+            } catch (e) {
+              console.error('[DevSettings] restoreFromAllPassesBackup error:', e);
+              Alert.alert('Error', 'Failed to restore from backup. See logs.');
+            }
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#E3F2FD' }]}> 
+            <Database size={24} color="#1565C0" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Restore From All-Passes Backup</Text>
+            <Text style={styles.settingDescription}>Rehydrate app state from the existing all-passes backup</Text>
+          </View>
+        </TouchableOpacity> */}
+
+        {/* <TouchableOpacity
+          style={[styles.devCard, { marginTop: 8 }]}
+          onPress={async () => {
+            try {
+              const res: any = await populateGamesFromCanonical();
+              if (res && res.success) {
+                Alert.alert('Populate Complete', `Populated ${res.gamesCount} games from canonical schedule.`);
+                await reloadFromStorage();
+              } else {
+                Alert.alert('Populate Failed', 'Could not populate games. Check logs.');
+              }
+            } catch (e) {
+              console.error('[DevSettings] populateGamesFromCanonical error:', e);
+              Alert.alert('Error', 'Failed to populate games. See logs.');
+            }
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#FFFDE7' }]}> 
+            <Database size={24} color="#F9A825" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Populate Games from Canonical</Text>
+            <Text style={styles.settingDescription}>Fill missing schedule games from bundled canonical schedule</Text>
+          </View>
+        </TouchableOpacity> */}
+        {/* <TouchableOpacity
+          style={[styles.devCard, { marginTop: 8 }]}
+          onPress={async () => {
+            try {
+              const res: any = await forcePopulateGamesFromCanonical();
+              if (res && res.success) {
+                Alert.alert('Force Populate Complete', `Populated ${res.gamesCount} games from canonical schedule.`);
+                await reloadFromStorage();
+              } else {
+                Alert.alert('Force Populate Failed', `Failed: ${res?.message || 'unknown'}`);
+              }
+            } catch (e) {
+              console.error('[DevSettings] forcePopulateGamesFromCanonical error:', e);
+              Alert.alert('Error', 'Failed to force-populate games. See logs.');
+            }
+          }}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#ECEFF1' }]}> 
+            <Database size={24} color="#546E7A" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Force-Populate Games</Text>
+            <Text style={styles.settingDescription}>Directly write canonical games into persisted storage</Text>
+          </View>
+        </TouchableOpacity> */}
 
         <TouchableOpacity
           style={[styles.devCard, isExporting && styles.cardDisabled]}
