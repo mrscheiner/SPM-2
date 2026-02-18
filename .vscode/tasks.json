@@ -1,15 +1,29 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Open ChatGPT",
-      "type": "shell",
-      "command": "npm run assistant:open",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "silent",
-        "panel": "shared"
-      }
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Open ChatGPT",
+			"type": "shell",
+			"command": "npm run assistant:open",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Build and Test App",
+			"type": "shell",
+			"command": "npm run build && npm test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Expo Start (Test App)",
+			"type": "shell",
+			"command": "npx expo start --dev-client --minify=false --clear",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
 }
