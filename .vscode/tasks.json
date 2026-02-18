@@ -24,6 +24,22 @@
 			"command": "npx expo start --dev-client --minify=false --clear",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Git: Checkpoint",
+			"type": "shell",
+			"command": "git checkpoint",
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Git: Rewind (Choose)",
+			"type": "shell",
+			"command": "git rewind",
+			"presentation": {
+				"reveal": "always"
+			}
 		}
 	]
 }

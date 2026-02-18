@@ -1,7 +1,164 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-console.log('[FileImportBox][DEBUG] Component loaded and rendered');
-// Auto-import CSV data and replace sales log on startup for user request
-import { useEffect } from 'react';
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  TextInput,
+} from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
+import { Upload, FileSpreadsheet, Check, AlertTriangle } from 'lucide-react-native';
+import { AppColors } from '@/constants/appColors';
+import { useSeasonPass } from '@/providers/SeasonPassProvider';
+import { Picker } from '@react-native-picker/picker';
+
+type TicketRow = {
+  totalPrice: number;
+  eventName: string;
+  eventStartTime: string;
+  tickets: { section: string; row: string; seat_number: number }[];
+};
+
+type ImportResult = {
+  success: boolean;
+  salesCount: number;
+  seatPairsCount: number;
+  message?: string;
+};
+
+interface FileImportBoxProps {
+  onImport: (rows: TicketRow[]) => Promise<ImportResult>;
+  activePassId: string | null;
+}
+
+type ImportStatus = 'idle' | 'parsing' | 'importing' | 'success' | 'error';
+
+function isZipLikeContent(text: string): boolean {
+  const head = text.slice(0, 20);
+  if (head.startsWith('PK') || head.startsWith('UEsDB')) return true;
+  return /PK\x03\x04/.test(head);
+}
+
+
+
+
+// Improved CSV parser for exported SeasonPassData
+function parseCSVContent(text: string): TicketRow[] {
+  // Remove BOM and normalize line endings
+  const cleanText = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const lines = cleanText.split('\n').filter(line => line.trim().length > 0);
+  if (lines.length < 2) return [];
+  // Find header row (skip empty lines)
+  let headerIdx = 0;
+  while (headerIdx < lines.length && lines[headerIdx].trim() === '') headerIdx++;
+  // Use a CSV splitting regex to handle quoted commas
+  function splitCSVRow(row: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result.map(s => s.replace(/^"|"$/g, '').trim());
+  }
+  const header = splitCSVRow(lines[headerIdx]);
+  // Find column indices by exact match for exported file
+  const idx = {
+    eventName: header.findIndex(h => h === 'Opponent'),
+    eventStartTime: header.findIndex(h => h === 'GameDate'),
+    section: header.findIndex(h => h === 'Section'),
+    row: header.findIndex(h => h === 'Row'),
+    seats: header.findIndex(h => h === 'Seats'),
+    seatCount: header.findIndex(h => h === 'SeatCount'),
+    totalPrice: header.findIndex(h => h === 'SalePrice'),
+    paymentStatus: header.findIndex(h => h === 'PaymentStatus'),
+  };
+  const rows: TicketRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.startsWith('#')) continue;
+    const cols = splitCSVRow(line);
+    // Skip summary/footer rows (e.g., TOTAL)
+    if (cols[0] && cols[0].toLowerCase().includes('total')) continue;
+    // Defensive: skip if not enough columns or missing required fields
+    if (cols.length < 8 || !cols[idx.section] || !cols[idx.row] || !cols[idx.seats] || !cols[idx.totalPrice]) continue;
+    // Parse seat numbers (e.g., "24-25" or "1-2")
+    let seatNumbers: number[] = [];
+    if (idx.seats >= 0 && cols[idx.seats]) {
+      const seatStr = cols[idx.seats].replace(/\s/g, '');
+      if (/\d+-\d+/.test(seatStr)) {
+        const [start, end] = seatStr.split('-').map(Number);
+        if (!isNaN(start) && !isNaN(end)) {
+          for (let s = start; s <= end; s++) seatNumbers.push(s);
+        }
+      } else if (/\d+(,\d+)*/.test(seatStr)) {
+        seatNumbers = seatStr.split(',').map(Number).filter(n => !isNaN(n));
+      }
+    }
+    if (seatNumbers.length === 0 && idx.seatCount >= 0 && cols[idx.seatCount]) {
+      // Fallback: just use seatCount
+      const count = parseInt(cols[idx.seatCount], 10);
+      if (!isNaN(count)) {
+        seatNumbers = Array.from({ length: count }, (_, k) => k + 1);
+      }
+    }
+    // Defensive: skip if price is not a number
+    const price = parseFloat(cols[idx.totalPrice]);
+    if (isNaN(price)) continue;
+    rows.push({
+      eventName: idx.eventName >= 0 ? cols[idx.eventName] : '',
+      eventStartTime: idx.eventStartTime >= 0 ? cols[idx.eventStartTime] : '',
+      totalPrice: price,
+      tickets: seatNumbers.map(seat_number => ({
+        section: idx.section >= 0 ? cols[idx.section] : '',
+        row: idx.row >= 0 ? cols[idx.row] : '',
+        seat_number,
+      })),
+    });
+  }
+  return rows;
+}
+
+
+function parseJSONContent(text: string): TicketRow[] {
+  try {
+    const data = JSON.parse(text);
+    if (Array.isArray(data)) {
+      // Try to coerce to TicketRow[]
+      return data.map((row: any) => ({
+        eventName: row.eventName || row.teamName || '',
+        eventStartTime: row.eventStartTime || row.date || '',
+        totalPrice: typeof row.totalPrice === 'number' ? row.totalPrice : parseFloat(row.totalPrice || '0'),
+        tickets: Array.isArray(row.tickets)
+          ? row.tickets.map((t: any) => ({
+              section: t.section || '',
+              row: t.row || '',
+              seat_number: typeof t.seat_number === 'number' ? t.seat_number : parseInt(t.seat_number || '1', 10),
+            }))
+          : [],
+      })).filter(r => r.tickets.length > 0);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+// ...existing code...
 
 const AUTO_IMPORT_CSV = `Team,Season,GameID,PairID,Section,Row,Seats,SeatCount,Price,PaymentStatus,,
 Florida Panthers,2025-2026,1,pair1,129,26,24-25,2,234.0,Paid,,
@@ -105,293 +262,28 @@ Florida Panthers,2025-2026,p2,pair1,129,26,24-25,2,37.48,Paid,,
 Florida Panthers,2025-2026,p2,pair2,308,8,1-2,2,14.31,Paid,,
 Florida Panthers,2025-2026,p2,pair3,325,5,6-7,2,21.6,Paid,,`;
 
-useEffect(() => {
-  // Only run once on mount
-  (async () => {
-    if (activePassId && onImport) {
-      const rows = parseCSVContent(AUTO_IMPORT_CSV);
-      if (rows.length) {
-        await onImport(rows);
-        console.log('[AutoImport] Sales log replaced with CSV data');
-      }
-    }
-  })();
-}, []);
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  TextInput,
-} from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
-import { Upload, FileSpreadsheet, Check, AlertTriangle } from 'lucide-react-native';
-import { AppColors } from '@/constants/appColors';
+import { useSeasonPass } from '@/providers/SeasonPassProvider';
 
-type TicketRow = {
-  totalPrice: number;
-  eventName: string;
-  eventStartTime: string;
-  tickets: { section: string; row: string; seat_number: number }[];
-};
-
-type ImportResult = {
-  success: boolean;
-  salesCount: number;
-  seatPairsCount: number;
-  message?: string;
-};
-
-interface FileImportBoxProps {
-  onImport: (rows: TicketRow[]) => Promise<ImportResult>;
-  activePassId: string | null;
-}
-
-type ImportStatus = 'idle' | 'parsing' | 'importing' | 'success' | 'error';
-
-function parseCSVContent(text: string): TicketRow[] {
-  console.log('[FileImport] Parsing CSV content, length:', text.length);
-  // Accept pasted text in the exact format of the provided CSV, ignore extra columns and trailing commas
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  if (lines.length < 2) {
-    console.log('[FileImport] CSV has fewer than 2 lines');
-    return [];
-  }
-  const header = lines[0].split(',').map(h => h.trim());
-  const colMap: Record<string, number> = {};
-  header.forEach((h, i) => {
-    if (h) colMap[h] = i;
-  });
-  // Only require columns present in the user's file
-  const requiredCols = ['GameID', 'PairID', 'Section', 'Row', 'Seats', 'SeatCount', 'Price', 'PaymentStatus'];
-  if (!requiredCols.every(col => col in colMap)) {
-    console.log('[FileImport] Missing required columns:', requiredCols.filter(col => !(col in colMap)));
-    return [];
-  }
-  const rows: TicketRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',');
-    // Defensive: skip if row is too short
-    if (row.length < header.length - 2) continue;
-    const gameId = row[colMap['GameID']];
-    const pairId = row[colMap['PairID']];
-    const section = row[colMap['Section']];
-    const r = row[colMap['Row']];
-    const seats = row[colMap['Seats']];
-    const seatCount = Number(row[colMap['SeatCount']]);
-    const price = Number(row[colMap['Price']]);
-    const paymentStatus = row[colMap['PaymentStatus']];
-    if (!gameId || !pairId || !section || !r || !seats || !seatCount || !price) continue;
-    // Parse seat numbers (e.g., 24-25 or 1-2)
-    let ticketSeats: number[] = [];
-    if (seats && seats.includes('-')) {
-      const [a, b] = seats.split('-').map(Number);
-      if (Number.isFinite(a) && Number.isFinite(b)) {
-        for (let s = a; s <= b; s++) ticketSeats.push(s);
-      }
-    } else if (seats) {
-      seats.split(',').forEach((s) => {
-        const n = Number(s.trim());
-        if (Number.isFinite(n)) ticketSeats.push(n);
-      });
-    } else {
-      for (let s = 1; s <= seatCount; s++) ticketSeats.push(s);
-    }
-    rows.push({
-      totalPrice: price,
-      eventName: '',
-      eventStartTime: '',
-      tickets: ticketSeats.map(sn => ({
-        section,
-        row: r,
-        seat_number: sn,
-        paymentStatus,
-      })),
-    });
-  }
-  console.log('[FileImport][DEBUG] Parsed rows:', rows.length);
-  return rows;
-
-  const rows = Array.from(grouped.values());
-  console.log('[FileImport] CSV parsed rows:', rows.length);
-  return rows;
-}
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"' && (i === 0 || line[i - 1] !== '\\')) {
-      inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
-
-function isZipLikeContent(text: string): boolean {
-  const head = text.slice(0, 20);
-  if (head.startsWith('PK') || head.startsWith('UEsDB')) return true;
-  return /PK\x03\x04/.test(head);
-}
-
-function parseJSONContent(text: string): TicketRow[] {
-  console.log('[FileImport] Parsing JSON content, length:', text.length);
-  const trimmed = text.trimStart();
-  if (isZipLikeContent(trimmed)) {
-    console.error('[FileImport] JSON parse error: ZIP/Excel signature detected');
-    return [];
-  }
-
-  let data: any;
-  try {
-    data = JSON.parse(trimmed);
-  } catch (e) {
-    console.error('[FileImport] JSON parse error:', e);
-    return [];
-  }
-
-  // Accept top-level salesData object (either wrapped or raw)
-  if (data && typeof data === 'object') {
-    // If file is just the salesData object itself
-    if (data.pair1 || data['1'] || data['p1']) {
-      // Looks like a raw salesData object (gameId keys)
-      data = { salesData: data };
-    }
-    // If file is { salesData: ... }
-    if (data.salesData && typeof data.salesData === 'object') {
-      // Wrap in a fake seasonPasses array for compatibility
-      data = { seasonPasses: [{ salesData: data.salesData }] };
-    }
-  }
-
-  let arr: any[] = [];
-  if (Array.isArray(data)) {
-    arr = data;
-  } else if (data && typeof data === 'object') {
-    if (Array.isArray(data.sales)) arr = data.sales;
-    else if (Array.isArray(data.data)) arr = data.data;
-    else if (Array.isArray(data.rows)) arr = data.rows;
-    else if (Array.isArray(data.records)) arr = data.records;
-    else if (Array.isArray(data.seasonPasses)) {
-      const allRows: TicketRow[] = [];
-      for (const sp of data.seasonPasses) {
-        if (sp.salesData && typeof sp.salesData === 'object') {
-          for (const [, gameSales] of Object.entries(sp.salesData as Record<string, Record<string, any>>)) {
-            for (const [, sale] of Object.entries(gameSales as Record<string, any>)) {
-              if (sale && typeof sale === 'object' && sale.price != null) {
-                const seatNums: number[] = [];
-                const seatsStr = sale.seats || '';
-                if (seatsStr.includes('-')) {
-                  const [a, b] = seatsStr.split('-').map(Number);
-                  if (Number.isFinite(a) && Number.isFinite(b)) {
-                    for (let s = a; s <= b; s++) seatNums.push(s);
-                  }
-                } else if (seatsStr) {
-                  seatsStr.split(',').forEach((s: string) => {
-                    const n = Number(s.trim());
-                    if (Number.isFinite(n)) seatNums.push(n);
-                  });
-                }
-                allRows.push({
-                  totalPrice: Number(sale.price) || 0,
-                  eventName: sale.opponent || sale.eventName || '',
-                  eventStartTime: sale.soldDate || sale.eventStartTime || '',
-                  tickets: seatNums.map(sn => ({
-                    section: sale.section || '',
-                    row: sale.row || '',
-                    seat_number: sn,
-                  })),
-                });
-              }
-            }
-          }
-        }
-      }
-      console.log('[FileImport] Parsed backup JSON with', allRows.length, 'sale records');
-      return allRows;
-    }
-  }
-
-  const rows: TicketRow[] = [];
-  for (const item of arr) {
-    if (!item || typeof item !== 'object') continue;
-
-    const totalPrice = Number(item.totalPrice ?? item.total_price ?? item.price ?? item.amount ?? 0);
-    const eventName = item.eventName ?? item.event_name ?? item.opponent ?? item.name ?? '';
-    const eventStartTime = item.eventStartTime ?? item.event_start_time ?? item.date ?? item.startTime ?? '';
-
-    if (!Number.isFinite(totalPrice) || !eventName || !eventStartTime) continue;
-
-    let isoDate = eventStartTime;
-    try {
-      const d = new Date(eventStartTime);
-      if (!isNaN(d.getTime())) isoDate = d.toISOString();
-    } catch { /* keep original */ }
-
-    let tickets: TicketRow['tickets'] = [];
-    if (Array.isArray(item.tickets)) {
-      tickets = item.tickets.map((t: any) => ({
-        section: String(t.section ?? '').trim(),
-        row: String(t.row ?? '').trim(),
-        seat_number: Number(t.seat_number ?? t.seatNumber ?? 0),
-      })).filter((t: any) => t.section && t.row && t.seat_number > 0);
-    } else if (item.section && item.row) {
-      const seatNum = Number(item.seat_number ?? item.seatNumber ?? item.seat ?? 0);
-      if (seatNum > 0) {
-        tickets = [{ section: String(item.section), row: String(item.row), seat_number: seatNum }];
-      } else if (item.seats) {
-        const seatsStr = String(item.seats);
-        const seatNums: number[] = [];
-        if (seatsStr.includes('-')) {
-          const [a, b] = seatsStr.split('-').map(Number);
-          if (Number.isFinite(a) && Number.isFinite(b)) {
-            for (let s = a; s <= b; s++) seatNums.push(s);
-          }
-        } else {
-          seatsStr.split(',').forEach((s: string) => {
-            const n = Number(s.trim());
-            if (Number.isFinite(n)) seatNums.push(n);
-          });
-        }
-        tickets = seatNums.map(sn => ({ section: String(item.section), row: String(item.row), seat_number: sn }));
-      }
-    }
-
-    rows.push({ totalPrice, eventName, eventStartTime: isoDate, tickets });
-  }
-
-  console.log('[FileImport] JSON parsed rows:', rows.length);
-  return rows;
-}
-
-async function parseExcelContent(_base64OrUri: string, _isBase64: boolean): Promise<TicketRow[]> {
-  console.log('[FileImport] Excel parsing is not supported in this environment. Please convert to CSV or JSON.');
-  return [];
-}
-
-export default function FileImportBox({ onImport, activePassId }: FileImportBoxProps) {
   const [status, setStatus] = useState<ImportStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [pastedText, setPastedText] = useState('');
   const [isImportingText, setIsImportingText] = useState(false);
   const dropRef = useRef<View>(null);
+  const { seasonPasses } = useSeasonPass ? useSeasonPass() : { seasonPasses: [] };
+  // Add local state for selected pass if more than one
+  const [selectedPassId, setSelectedPassId] = useState<string | null>(
+    activePassId || (seasonPasses && seasonPasses.length === 1 ? seasonPasses[0].id : null)
+  );
+  // Update selectedPassId if passes change and only one exists
+  useEffect(() => {
+    if (seasonPasses.length === 1) setSelectedPassId(seasonPasses[0].id);
+  }, [seasonPasses.length]);
+  const effectivePassId = selectedPassId;
+// ...existing code...
 
   const processFile = useCallback(async (content: string, fileName: string, isBase64: boolean = false) => {
-    if (!activePassId) {
+    if (!effectivePassId) {
       Alert.alert('Error', 'No active season pass. Create or select a pass first.');
       return;
     }
@@ -589,6 +481,20 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
 
   return (
     <View style={styles.container}>
+      {seasonPasses.length > 1 && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Select Season Pass to Import Into:</Text>
+          <Picker
+            selectedValue={selectedPassId}
+            onValueChange={setSelectedPassId}
+            style={{ backgroundColor: '#F3F4F6', borderRadius: 8 }}
+          >
+            {seasonPasses.map(pass => (
+              <Picker.Item key={pass.id} label={pass.teamName + ' (' + (pass.seasonLabel || pass.id) + ')'} value={pass.id} />
+            ))}
+          </Picker>
+        </View>
+      )}
       <View style={styles.headerRow}>
         <FileSpreadsheet size={18} color="#059669" />
         <Text style={styles.title}>Import Sales File</Text>
@@ -599,13 +505,14 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
 
       <TouchableOpacity
         onPress={isProcessing ? undefined : handlePickFile}
-        disabled={isProcessing}
+        disabled={isProcessing || !effectivePassId}
         activeOpacity={0.7}
         style={[
           styles.dropZone,
           isDragOver && styles.dropZoneActive,
           status === 'success' && styles.dropZoneSuccess,
           status === 'error' && styles.dropZoneError,
+          !effectivePassId && { opacity: 0.5 },
         ]}
         testID="fileImportBox.dropZone"
       >
@@ -697,8 +604,8 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
             setStatus('importing');
             setStatusMessage('Importing pasted data...');
             // Patch: Use replaceSalesDataFromPastedSeed for full sales log replacement
-            if (typeof window !== 'undefined' && window.SeasonPassProvider && window.SeasonPassProvider.replaceSalesDataFromPastedSeed) {
-              const result = await window.SeasonPassProvider.replaceSalesDataFromPastedSeed(pastedText, activePassId);
+            if (typeof window !== 'undefined' && (window as any).SeasonPassProvider && (window as any).SeasonPassProvider.replaceSalesDataFromPastedSeed) {
+              const result = await (window as any).SeasonPassProvider.replaceSalesDataFromPastedSeed(pastedText, effectivePassId);
               setStatus(result.success ? 'success' : 'error');
               setStatusMessage(result.message || (result.success ? 'Import successful!' : 'Import failed.'));
             } else {
@@ -714,10 +621,10 @@ export default function FileImportBox({ onImport, activePassId }: FileImportBoxP
             setIsImportingText(false);
           }
         }}
-        disabled={isImportingText || isProcessing || !pastedText.trim()}
+        disabled={isImportingText || isProcessing || !pastedText.trim() || !effectivePassId}
       >
         <Text style={{ color: '#fff', fontWeight: 'bold' }}>{isImportingText ? 'Importing...' : 'Import Pasted CSV Text'}</Text>
-      </TouchableOpacity
+      </TouchableOpacity>
 
       {(status === 'success' || status === 'error') && (
         <TouchableOpacity
