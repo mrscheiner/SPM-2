@@ -32,7 +32,6 @@
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-picker/picker": "^2.11.4",
-    "@rork-ai/toolkit-sdk": "^0.2.54",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@tanstack/react-query": "^5.90.19",
     "@trpc/client": "^11.8.1",
