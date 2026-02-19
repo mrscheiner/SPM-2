@@ -262,8 +262,7 @@ Florida Panthers,2025-2026,p2,pair1,129,26,24-25,2,37.48,Paid,,
 Florida Panthers,2025-2026,p2,pair2,308,8,1-2,2,14.31,Paid,,
 Florida Panthers,2025-2026,p2,pair3,325,5,6-7,2,21.6,Paid,,`;
 
-import { useSeasonPass } from '@/providers/SeasonPassProvider';
-
+const FileImportBox = ({ onImport, activePassId }: FileImportBoxProps) => {
   const [status, setStatus] = useState<ImportStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -640,6 +639,8 @@ import { useSeasonPass } from '@/providers/SeasonPassProvider';
     </View>
   );
 }
+
+export default FileImportBox;
 
 const styles = StyleSheet.create({
   container: {
