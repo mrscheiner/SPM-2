@@ -269,7 +269,7 @@ const FileImportBox = ({ onImport, activePassId }: FileImportBoxProps) => {
   const [pastedText, setPastedText] = useState('');
   const [isImportingText, setIsImportingText] = useState(false);
   const dropRef = useRef<View>(null);
-  const { seasonPasses } = useSeasonPass ? useSeasonPass() : { seasonPasses: [] };
+  const { seasonPasses } = useSeasonPass();
   // Add local state for selected pass if more than one
   const [selectedPassId, setSelectedPassId] = useState<string | null>(
     activePassId || (seasonPasses && seasonPasses.length === 1 ? seasonPasses[0].id : null)
