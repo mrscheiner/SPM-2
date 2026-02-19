@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "rork-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -16,9 +16,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.spm-2",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiredDeviceCapabilities": ["arm64", "telephony"]
       }
     },
     "android": {
